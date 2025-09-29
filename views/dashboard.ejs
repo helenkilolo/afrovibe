@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="afro">
+  <%- include('partials/head.ejs', { pageTitle: 'Dashboard' }) %>
+  <body class="bg-base-100 min-h-screen flex flex-col">
+    <!-- Navbar -->
+    <%- include('partials/navbar.ejs') %>
+
+    <main class="container mx-auto px-4 py-6 flex-grow">
+      <!-- Top strip: likes remaining + quick actions (kept slim) -->
+      <section class="mb-4">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <!-- Likes remaining -->
+          <div class="card bg-base-200 shadow-sm">
+            <div class="card-body py-3">
+              <div class="flex items-center justify-between">
+                <span class="text-sm opacity-70">Likes remaining</span>
+                <span class="text-lg font-semibold">
+                  <span id="likes-count"><%= likesRemaining >= 0 ? likesRemaining : '∞' %></span>
+                </span>
+              </div>
+              <% if (likesRemaining === 0) { %>
+                <p class="text-xs mt-2">Daily limit reached — upgrade for unlimited likes.</p>
+              <% } %>
+            </div>
+          </div>
+
+          <!-- Boost -->
+          <div class="card bg-base-200 shadow-sm">
+            <div class="card-body py-3 flex items-center justify-between">
+              <div>
+                <div class="text-sm opacity-70">Visibility</div>
+                <div class="text-xs">Boost your profile for 30 minutes</div>
+              </div>
+              <button id="boostBtn" class="btn btn-primary btn-sm">Boost</button>
+            </div>
+          </div>
+
+          <!-- Plans (prints current plan) -->
+          <div class="card bg-base-200 shadow-sm">
+            <div class="card-body py-3 flex items-center justify-between">
+              <div>
+                <div class="text-sm opacity-70">Membership</div>
+                <div class="text-xs">
+                  Your plan:
+                  <span class="font-semibold capitalize">
+                    <%= (currentUser.memberLevel || (currentUser.isPremium ? 'silver' : 'free')) %>
+                  </span>
+                </div>
+              </div>
+              <a href="/upgrade" class="btn btn-outline btn-sm">Upgrade Now</a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Header row -->
+      <section class="mb-4 flex items-center justify-between">
+        <h2 class="text-xl font-semibold">Today’s picks</h2>
+        <button id="openFilters" class="btn btn-outline btn-sm open-filters" aria-haspopup="dialog" aria-expanded="false">
+          Filters
+        </button>
+      </section>
+
+      <!-- Profiles -->
+      <section aria-label="Profiles">
+        <% if ((potentialMatches || []).length === 0) { %>
+          <div class="text-center p-10 bg-base-200 rounded-xl">
+            <p>No results. Try widening your filters.</p>
+          </div>
+        <% } %>
+
+        <div class="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+          <% (potentialMatches || []).forEach(function(u){ 
+               const photosArr = Array.isArray(u?.profile?.photos) ? u.profile.photos : [];
+               const mainPhoto = photosArr[0] || '/images/default-avatar.png';
+          %>
+            <article class="card bg-base-100 shadow-md hover:shadow-lg transition-shadow" data-user-id="<%= u._id %>">
+              <!-- Uniform compact frame (identical size across all cards) -->
+              <figure class="relative overflow-hidden rounded-t-xl aspect-[4/5] bg-base-200">
+                <img
+                  src="<%= mainPhoto %>"
+                  alt="<%= u.username %> photo"
+                  class="absolute inset-0 w-full h-full object-cover"
+                  loading="lazy">
+
+                <% if (photosArr.length > 1) { %>
+                  <!-- Clickable camera chip (opens lightbox via JS; still links as fallback) -->
+                  <a
+                    href="/users/<%= u._id %>#photos"
+                    class="absolute bottom-2 right-2 inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium bg-base-100/90 shadow hover:bg-base-100 open-photos"
+                    title="View photos"
+                    data-user-id="<%= u._id %>"
+                    data-username="<%= u.username %>"
+                    data-photos='<%- JSON.stringify(photosArr).replace(/</g,"\\u003c") %>'>
+                    <svg viewBox="0 0 24 24" class="w-4 h-4 opacity-80" aria-hidden="true">
+                      <path fill="currentColor" d="M12 8.9a3.1 3.1 0 1 0 0 6.2a3.1 3.1 0 0 0 0-6.2m7-2.4h-2.6l-1.2-1.6c-.2-.2-.4-.4-.7-.4H9.5c-.3 0-.5.2-.7.4L7.6 6.5H5a2 2 0 0 0-2 2V17a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8.5a2 2 0 0 0-2-2Z"/>
+                    </svg>
+                    <span><%= photosArr.length %> photos</span>
+                  </a>
+                <% } %>
+
+                <!-- Tier badge (free / silver / emerald) -->
+                <% if (u.memberLevel) { %>
+                  <span
+                    class="absolute top-2 left-2 inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-semibold bg-base-100/90 shadow-sm"
+                    title="<%= u.memberLevel %> member">
+                    <svg viewBox="0 0 24 24" class="w-4 h-4
+                      <%= u.memberLevel === 'emerald' ? 'text-emerald-500' : (u.memberLevel === 'silver' ? 'text-slate-400' : 'text-base-content/50') %>">
+                      <path fill="currentColor" d="M12 2l3.09 6.26L22 9.27l-5 4.88L18.18 22 12 18.77 5.82 22 7 14.15l-5-4.88 6.91-1.01L12 2z"/>
+                    </svg>
+                    <span class="<%= u.memberLevel === 'emerald' ? 'text-emerald-600' : (u.memberLevel === 'silver' ? 'text-slate-500' : 'opacity-60') %> capitalize">
+                      <%= u.memberLevel %>
+                    </span>
+                  </span>
+                <% } %>
+              </figure>
+
+              <div class="card-body p-3">
+                <div class="flex items-center gap-2">
+                  <h3 class="text-base font-semibold truncate">
+                    <%= u.username %>, <%= u.profile?.age || '—' %>
+                  </h3>
+                  <% if (u.verifiedAt) { %><span class="badge badge-success" title="Verified">Verified</span><% } %>
+                  <% if (u.isOnline)   { %><span class="badge badge-info"    title="Online now">Online</span><% } %>
+                  <% if (u.boostActive){ %><span class="badge badge-primary" title="Boosted">Boost</span><% } %>
+                </div>
+
+                <% if (u.memberLevel && u.memberLevel !== 'free') { %>
+                  <div class="mt-1">
+                    <span class="badge badge-ghost badge-xs capitalize"><%= u.memberLevel %></span>
+                  </div>
+                <% } %>
+
+                <div class="mt-1 text-xs flex items-center gap-1 opacity-80">
+  <!-- pin icon -->
+  <svg viewBox="0 0 24 24" class="w-4 h-4 opacity-80" aria-hidden="true">
+    <path fill="currentColor" d="M12 2a7 7 0 0 0-7 7c0 4.97 6.07 11.37 6.33 11.64a1 1 0 0 0 1.34 0C12.93 20.37 19 13.97 19 9a7 7 0 0 0-7-7m0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5Z"/>
+  </svg>
+  <span>
+    <%= [u.profile?.city, u.profile?.stateProvince, u.profile?.country].filter(Boolean).join(', ') || '—' %>
+    <% if (typeof u.distanceKm === 'number') { %>
+      • <%= Math.round(u.distanceKm) %> km away
+    <% } %>
+  </span>
+</div>
+
+<% if (u.profile?.bio) { %>
+  <p class="mt-2 text-sm leading-snug line-clamp-2">
+    <%= u.profile.bio %>
+  </p>
+<% } %>
+
+                <!-- Actions -->
+<div class="mt-3 grid grid-cols-3 gap-2">
+  <button
+  class="btn btn-secondary btn-xs superlike-btn"
+  data-user-id="<%= u._id %>"
+  data-id="<%= u._id %>"
+  title="Super-Like (stand out!)"
+  <%= u.iSuperLiked ? 'disabled' : '' %>>
+  ⚡ <span class="ml-1"><%= u.iSuperLiked ? 'Super-Liked' : 'Super-Like' %></span>
+</button>
+  <!-- Like (unchanged) -->
+  <button
+  class="btn btn-primary btn-xs like-btn"
+  data-user-id="<%= u._id %>"
+  data-username="<%= u.username %>">
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"
+       fill="currentColor" aria-hidden="true"
+       class="w-4 h-4 mr-1">
+    <path d="M3.172 5.172a4.5 4.5 0 016.364 0L10 5.636l.464-.464a4.5 4.5 0 116.364 6.364L10 18.364l-6.828-6.828a4.5 4.5 0 010-6.364z"/>
+  </svg>
+  <span>Like</span>
+</button>
+<!-- Wave (adds .wave-btn, disables if already waved, shows label) -->
+  <button
+    class="btn btn-outline btn-xs interest-btn wave-btn"
+    data-user-id="<%= u._id %>"
+    data-id="<%= u._id %>"
+    data-username="<%= u.username %>"
+    <%= u.iWaved ? 'disabled' : '' %>>
+    👋 <span class="ml-1"><%= u.iWaved ? 'Waved' : 'Wave' %></span>
+  </button>
+
+  <!-- Favorite (keeps your star; adds yellow state + ARIA + data-id) -->
+  <button
+    class="btn btn-ghost btn-xs favorite-toggle <%= u.isFavorite ? 'text-yellow-500' : '' %>"
+    data-user-id="<%= u._id %>"
+    data-id="<%= u._id %>"
+    aria-pressed="<%= u.isFavorite ? 'true' : 'false' %>"
+    title="<%= u.isFavorite ? 'Unfavorite' : 'Favorite' %>">
+    <span aria-hidden="true">★</span>
+    <span class="sr-only"><%= u.isFavorite ? 'Unfavorite' : 'Favorite' %></span>
+  </button>
+</div>
+
+<div class="mt-2 flex gap-2">
+  <a class="btn btn-ghost btn-2xs" href="/users/<%= u._id %>">View</a>
+  <button
+    class="btn btn-ghost btn-2xs dislike-btn"
+    data-user-id="<%= u._id %>"
+    data-username="<%= u.username %>">
+    Hide
+  </button>
+</div>
+
+              </div>
+            </article>
+          <% }) %>
+        </div>
+      </section>
+
+      <!-- Pagination (if available) -->
+      <% if (pageMeta && pageMeta.totalPages > 1) { %>
+        <div class="mt-6 flex justify-center gap-2">
+          <% const cur = pageMeta.page; const totalPages = pageMeta.totalPages; %>
+          <% if (cur > 1) { %>
+            <a class="btn btn-sm" href="?<%= Object.entries({ ...filters, page: cur - 1 }).map(([k,v]) => `${k}=${encodeURIComponent(v||'')}`).join('&') %>">Prev</a>
+          <% } %>
+          <span class="text-sm opacity-70 self-center">Page <%= cur %> / <%= totalPages %></span>
+          <% if (cur < totalPages) { %>
+            <a class="btn btn-sm" href="?<%= Object.entries({ ...filters, page: cur + 1 }).map(([k,v]) => `${k}=${encodeURIComponent(v||'')}`).join('&') %>">Next</a>
+          <% } %>
+        </div>
+      <% } %>
+    </main>
+
+    <!-- Filters dialog (includes advanced toggles) -->
+    <dialog id="filtersDialog" class="modal">
+      <div class="modal-box max-w-3xl">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="font-bold text-lg">Filters</h3>
+          <button class="btn btn-ghost btn-sm" data-close="filters" aria-label="Close">✕</button>
+        </div>
+
+        <form id="filtersForm" method="get" class="space-y-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <!-- Core -->
+            <label class="form-control">
+              <span class="label-text">Seeking gender</span>
+              <select name="seekingGender" class="select select-bordered">
+                <option value="Any" <%= filters.seekingGender==='Any'?'selected':'' %>>Any</option>
+                <option value="Male" <%= filters.seekingGender==='Male'?'selected':'' %>>Male</option>
+                <option value="Female" <%= filters.seekingGender==='Female'?'selected':'' %>>Female</option>
+                <option value="Non-binary" <%= filters.seekingGender==='Non-binary'?'selected':'' %>>Non-binary</option>
+              </select>
+            </label>
+
+            <label class="form-control">
+              <span class="label-text">Min age</span>
+              <input type="number" name="minAge" min="18" max="99" class="input input-bordered" value="<%= filters.minAge || '' %>">
+            </label>
+            <label class="form-control">
+              <span class="label-text">Max age</span>
+              <input type="number" name="maxAge" min="18" max="99" class="input input-bordered" value="<%= filters.maxAge || '' %>">
+            </label>
+
+            <label class="form-control">
+              <span class="label-text">Country</span>
+              <input type="text" name="country" class="input input-bordered" value="<%= filters.country || '' %>">
+            </label>
+            <label class="form-control">
+              <span class="label-text">State / Province</span>
+              <input type="text" name="stateProvince" class="input input-bordered" value="<%= filters.stateProvince || '' %>">
+            </label>
+            <label class="form-control">
+              <span class="label-text">City</span>
+              <input type="text" name="city" class="input input-bordered" value="<%= filters.city || '' %>">
+            </label>
+
+            <label class="form-control sm:col-span-2">
+              <span class="label-text">Search text</span>
+              <input type="text" name="q" class="input input-bordered" value="<%= filters.q || '' %>" placeholder="bio, username">
+            </label>
+
+            <label class="form-control sm:col-span-2">
+              <span class="label-text">Interests</span>
+              <input type="text" name="interests" class="input input-bordered" value="<%= filters.interests || '' %>" placeholder="comma separated">
+            </label>
+
+            <!-- New toggles -->
+            <label class="label cursor-pointer">
+              <span class="label-text">Verified only</span>
+              <input type="checkbox" name="verifiedOnly" value="1" class="toggle"
+                     <%= filters.verifiedOnly === '1' ? 'checked' : '' %> >
+            </label>
+
+            <label class="label cursor-pointer">
+              <span class="label-text">Online now</span>
+              <input type="checkbox" name="onlineNow" value="1" class="toggle"
+                     <%= filters.onlineNow === '1' ? 'checked' : '' %> >
+            </label>
+
+            <label class="label cursor-pointer">
+              <span class="label-text">Has photo</span>
+              <input type="checkbox" name="hasPhoto" value="1" class="toggle"
+                     <%= filters.hasPhoto === '1' ? 'checked' : '' %> >
+            </label>
+
+            <label class="form-control">
+              <span class="label-text">Min photos</span>
+              <select name="minPhotos" class="select select-bordered">
+                <option value="">Any</option>
+                <option value="2" <%= filters.minPhotos==='2'?'selected':'' %>>2+</option>
+                <option value="3" <%= filters.minPhotos==='3'?'selected':'' %>>3+</option>
+                <option value="4" <%= filters.minPhotos==='4'?'selected':'' %>>4+</option>
+              </select>
+            </label>
+
+            <!-- Radius -->
+            <label class="form-control">
+              <span class="label-text">Radius (km)</span>
+              <input type="number" min="1" max="5000" name="radiusKm" class="input input-bordered"
+                    value="<%= filters.radiusKm || '' %>" placeholder="e.g., 50">
+            </label>
+
+            <!-- Religion / Denomination -->
+            <label class="form-control">
+              <span class="label-text">Religion</span>
+              <input type="text" name="religion" class="input input-bordered" value="<%= filters.religion || '' %>">
+            </label>
+            <label class="form-control">
+              <span class="label-text">Denomination</span>
+              <input type="text" name="denomination" class="input input-bordered" value="<%= filters.denomination || '' %>">
+            </label>
+
+            <!-- Languages (CSV) -->
+            <label class="form-control sm:col-span-2">
+              <span class="label-text">Languages (comma separated)</span>
+              <input type="text" name="languages" class="input input-bordered"
+                    value="<%= Array.isArray(filters.languages)?filters.languages.join(', '):(filters.languages||'') %>"
+                    placeholder="e.g., English, Swahili, Yoruba">
+            </label>
+
+            <!-- Education / Lifestyle -->
+            <label class="form-control">
+              <span class="label-text">Education</span>
+              <input type="text" name="education" class="input input-bordered" value="<%= filters.education || '' %>">
+            </label>
+            <label class="form-control">
+              <span class="label-text">Smoking</span>
+              <input type="text" name="smoking" class="input input-bordered" value="<%= filters.smoking || '' %>">
+            </label>
+            <label class="form-control">
+              <span class="label-text">Drinking</span>
+              <input type="text" name="drinking" class="input input-bordered" value="<%= filters.drinking || '' %>">
+            </label>
+
+            <!-- Sort -->
+            <label class="form-control">
+              <span class="label-text">Sort by</span>
+              <select name="sort" class="select select-bordered">
+                <option value="active"   <%= filters.sort==='active'?'selected':'' %>>Active first</option>
+                <option value="recent"   <%= filters.sort==='recent'?'selected':'' %>>Newest</option>
+                <option value="distance" <%= filters.sort==='distance'?'selected':'' %>>Nearest</option>
+                <option value="ageAsc"   <%= filters.sort==='ageAsc'?'selected':'' %>>Age ↑</option>
+                <option value="ageDesc"  <%= filters.sort==='ageDesc'?'selected':'' %>>Age ↓</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="mt-4 flex justify-end gap-2">
+            <a class="btn btn-ghost" href="/dashboard">Reset</a>
+            <button class="btn btn-primary" type="submit">Apply</button>
+          </div>
+        </form>
+      </div>
+    </dialog>
+
+    <!-- Alert/modal used by JS -->
+    <dialog id="uiModal" class="modal">
+      <div class="modal-box">
+        <div class="flex items-center justify-between">
+          <h3 id="uiModalTitle" class="font-bold text-lg">Info</h3>
+          <button class="btn btn-ghost btn-sm" data-modal-close aria-label="Close">✕</button>
+        </div>
+        <p id="uiModalBody" class="py-4">Done.</p>
+        <div class="modal-action">
+          <button class="btn btn-primary" data-modal-close>OK</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- (Optional) Photo lightbox dialog if not already on the page -->
+    <dialog id="photoLightbox" class="modal">
+      <div class="modal-box max-w-3xl p-0 overflow-hidden">
+        <div class="relative bg-black">
+          <img id="photoImg" src="" alt="" class="w-full max-h-[80vh] object-contain transition-transform duration-200" />
+          <button id="photoPrev" class="absolute left-2 top-1/2 -translate-y-1/2 btn btn-circle">‹</button>
+          <button id="photoNext" class="absolute right-2 top-1/2 -translate-y-1/2 btn btn-circle">›</button>
+          <button class="absolute right-2 top-2 btn btn-sm" data-close="photoLightbox">✕</button>
+        </div>
+        <div class="p-3 flex items-center justify-between gap-2">
+          <div class="text-sm"><span id="photoCaption"></span></div>
+          <a id="photoProfileLink" class="btn btn-outline btn-sm" href="#">View profile</a>
+        </div>
+      </div>
+    </dialog>
+
+    <%- include('partials/footer.ejs') %>
+      <!-- at the very bottom, before closing </body> -->
+<script src="/socket.io/socket.io.js" defer></script>
+<script src="/js/socket.io.js" defer></script>
+<script nonce="<%= cspNonce %>" src="/js/dashboard.js" defer></script>
+  </body>
+</html>

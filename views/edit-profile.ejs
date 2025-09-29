@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="cupcake">
+<%- include('partials/head.ejs', { pageTitle: 'Messages' }) %>
+<body data-theme="cupcake" class="bg-base-100 min-h-screen flex flex-col">
+  <%- include('partials/navbar.ejs') %>
+  <div class="container mx-auto p-4 flex-grow">
+    <div class="max-w-2xl mx-auto bg-base-200 p-6 rounded-lg shadow-lg">
+      <h1 class="text-3xl font-bold mb-6">Edit Profile</h1>
+      <% if (error) { %>
+        <div class="alert alert-error shadow-lg mb-4">
+          <div>
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <span><%= error %></span>
+          </div>
+        </div>
+      <% } %>
+      <form action="/edit-profile" method="POST" class="space-y-4">
+        <!-- Basic Info -->
+        <div class="collapse collapse-arrow bg-base-100">
+          <input type="checkbox" class="peer">
+          <div class="collapse-title text-lg font-medium">Basic Info</div>
+          <div class="collapse-content">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="label">First Name</label>
+                <input type="text" name="firstName" value="<%= currentUser.profile ? currentUser.profile.firstName : '' %>" class="input input-bordered w-full" required>
+              </div>
+              <div>
+                <label class="label">Gender</label>
+                <select name="gender" class="select select-bordered w-full">
+                  <option value="Male" <%= (currentUser.profile && currentUser.profile.gender === 'Male') ? 'selected' : '' %>>Male</option>
+                  <option value="Female" <%= (currentUser.profile && currentUser.profile.gender === 'Female') ? 'selected' : '' %>>Female</option>
+                  <option value="Other" <%= (currentUser.profile && currentUser.profile.gender === 'Other') ? 'selected' : '' %>>Other</option>
+                </select>
+              </div>
+              <div>
+                <label class="label">Birth Month</label>
+                <input type="text" name="birthMonth" value="<%= currentUser.profile ? currentUser.profile.birthMonth : '' %>" class="input input-bordered w-full">
+              </div>
+              <div>
+                <label class="label">Birth Year</label>
+                <input type="number" name="birthYear" value="<%= currentUser.profile ? currentUser.profile.birthYear : '' %>" class="input input-bordered w-full" min="1900" max="2025">
+              </div>
+              <div>
+                <label class="label">Country</label>
+                <input type="text" name="country" value="<%= currentUser.profile ? currentUser.profile.country : '' %>" class="input input-bordered w-full">
+              </div>
+              <div>
+                <label class="label">State/Province</label>
+                <input type="text" name="stateProvince" value="<%= currentUser.profile ? currentUser.profile.stateProvince : '' %>" class="input input-bordered w-full">
+              </div>
+              <div>
+                <label class="label">City</label>
+                <input type="text" name="city" value="<%= currentUser.profile ? currentUser.profile.city : '' %>" class="input input-bordered w-full">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- About Me -->
+        <div class="collapse collapse-arrow bg-base-100">
+          <input type="checkbox" class="peer">
+          <div class="collapse-title text-lg font-medium">About Me</div>
+          <div class="collapse-content">
+            <div class="space-y-4">
+              <div>
+                <label class="label">Bio</label>
+                <textarea name="bio" class="textarea textarea-bordered w-full" maxlength="500" placeholder="Tell us about yourself"><%= currentUser.profile ? currentUser.profile.bio : '' %></textarea>
+              </div>
+              <div>
+                <label class="label">Looking For</label>
+                <textarea name="lookingFor" class="textarea textarea-bordered w-full" maxlength="500" placeholder="What are you looking for in a partner?"><%= currentUser.profile ? currentUser.profile.lookingFor : '' %></textarea>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Appearance -->
+        <div class="collapse collapse-arrow bg-base-100">
+          <input type="checkbox" class="peer">
+          <div class="collapse-title text-lg font-medium">Appearance</div>
+          <div class="collapse-content">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="label">Hair Color</label>
+                <select name="hairColor" class="select select-bordered w-full">
+                  <option value="Black" <%= (currentUser.profile && currentUser.profile.hairColor === 'Black') ? 'selected' : '' %>>Black</option>
+                  <option value="Brown" <%= (currentUser.profile && currentUser.profile.hairColor === 'Brown') ? 'selected' : '' %>>Brown</option>
+                  <option value="Blonde" <%= (currentUser.profile && currentUser.profile.hairColor === 'Blonde') ? 'selected' : '' %>>Blonde</option>
+                  <option value="Red" <%= (currentUser.profile && currentUser.profile.hairColor === 'Red') ? 'selected' : '' %>>Red</option>
+                  <option value="Other" <%= (currentUser.profile && currentUser.profile.hairColor === 'Other') ? 'selected' : '' %>>Other</option>
+                </select>
+              </div>
+              <div>
+                <label class="label">Eye Color</label>
+                <select name="eyeColor" class="select select-bordered w-full">
+                  <option value="Brown" <%= (currentUser.profile && currentUser.profile.eyeColor === 'Brown') ? 'selected' : '' %>>Brown</option>
+                  <option value="Blue" <%= (currentUser.profile && currentUser.profile.eyeColor === 'Blue') ? 'selected' : '' %>>Blue</option>
+                  <option value="Green" <%= (currentUser.profile && currentUser.profile.eyeColor === 'Green') ? 'selected' : '' %>>Green</option>
+                  <option value="Hazel" <%= (currentUser.profile && currentUser.profile.eyeColor === 'Hazel') ? 'selected' : '' %>>Hazel</option>
+                  <option value="Other" <%= (currentUser.profile && currentUser.profile.eyeColor === 'Other') ? 'selected' : '' %>>Other</option>
+                </select>
+              </div>
+              <div>
+                <label class="label">Height</label>
+                <input type="text" name="height" value="<%= currentUser.profile ? currentUser.profile.height : '' %>" class="input input-bordered w-full" placeholder="e.g., 5'10">
+              </div>
+              <div>
+                <label class="label">Weight</label>
+                <input type="text" name="weight" value="<%= currentUser.profile ? currentUser.profile.weight : '' %>" class="input input-bordered w-full" placeholder="e.g., 150 lb">
+              </div>
+              <div>
+                <label class="label">Body Type</label>
+                <select name="bodyType" class="select select-bordered w-full">
+                  <option value="Slim" <%= (currentUser.profile && currentUser.profile.bodyType === 'Slim') ? 'selected' : '' %>>Slim</option>
+                  <option value="Average" <%= (currentUser.profile && currentUser.profile.bodyType === 'Average') ? 'selected' : '' %>>Average</option>
+                  <option value="Athletic" <%= (currentUser.profile && currentUser.profile.bodyType === 'Athletic') ? 'selected' : '' %>>Athletic</option>
+                  <option value="Curvy" <%= (currentUser.profile && currentUser.profile.bodyType === 'Curvy') ? 'selected' : '' %>>Curvy</option>
+                  <option value="Other" <%= (currentUser.profile && currentUser.profile.bodyType === 'Other') ? 'selected' : '' %>>Other</option>
+                </select>
+              </div>
+              <div>
+                <label class="label">Ethnicity</label>
+                <select name="ethnicity" class="select select-bordered w-full">
+                  <option value="African" <%= (currentUser.profile && currentUser.profile.ethnicity === 'African') ? 'selected' : '' %>>African</option>
+                  <option value="Afro Caribbean" <%= (currentUser.profile && currentUser.profile.ethnicity === 'Afro Caribbean') ? 'selected' : '' %>>Afro Caribbean</option>
+                  <option value="Mixed" <%= (currentUser.profile && currentUser.profile.ethnicity === 'Mixed') ? 'selected' : '' %>>Mixed</option>
+                  <option value="Other" <%= (currentUser.profile && currentUser.profile.ethnicity === 'Other') ? 'selected' : '' %>>Other</option>
+                </select>
+              </div>
+              <div>
+                <label class="label">Body Art</label>
+                <input type="text" name="bodyArt" value="<%= currentUser.profile && currentUser.profile.bodyArt ? currentUser.profile.bodyArt.join(', ') : '' %>" class="input input-bordered w-full" placeholder="e.g., Tattoo, Piercing">
+              </div>
+              <div>
+                <label class="label">Appearance</label>
+                <input type="text" name="appearance" value="<%= currentUser.profile ? currentUser.profile.appearance : '' %>" class="input input-bordered w-full" placeholder="Describe your appearance">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Lifestyle -->
+        <div class="collapse collapse-arrow bg-base-100">
+          <input type="checkbox" class="peer">
+          <div class="collapse-title text-lg font-medium">Lifestyle</div>
+          <div class="collapse-content">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="label">Drinks</label>
+                <select name="drinks" class="select select-bordered w-full">
+                  <option value="Never" <%= (currentUser.profile && currentUser.profile.drinks === 'Never') ? 'selected' : '' %>>Never</option>
+                  <option value="Socially" <%= (currentUser.profile && currentUser.profile.drinks === 'Socially') ? 'selected' : '' %>>Socially</option>
+                  <option value="Often" <%= (currentUser.profile && currentUser.profile.drinks === 'Often') ? 'selected' : '' %>>Often</option>
+                  <option value="Quit" <%= (currentUser.profile && currentUser.profile.drinks === 'Quit') ? 'selected' : '' %>>Quit</option>
+                </select>
+              </div>
+              <div>
+                <label class="label">Smokes</label>
+                <select name="smokes" class="select select-bordered w-full">
+                  <option value="Never" <%= (currentUser.profile && currentUser.profile.smokes === 'Never') ? 'selected' : '' %>>Never</option>
+                  <option value="Socially" <%= (currentUser.profile && currentUser.profile.smokes === 'Socially') ? 'selected' : '' %>>Socially</option>
+                  <option value="Often" <%= (currentUser.profile && currentUser.profile.smokes === 'Often') ? 'selected' : '' %>>Often</option>
+                  <option value="Quit" <%= (currentUser.profile && currentUser.profile.smokes === 'Quit') ? 'selected' : '' %>>Quit</option>
+                </select>
+              </div>
+              <div>
+                <label class="label">Marital Status</label>
+                <select name="maritalStatus" class="select select-bordered w-full">
+                  <option value="Single" <%= (currentUser.profile && currentUser.profile.maritalStatus === 'Single') ? 'selected' : '' %>>Single</option>
+                  <option value="Divorced" <%= (currentUser.profile && currentUser.profile.maritalStatus === 'Divorced') ? 'selected' : '' %>>Divorced</option>
+                  <option value="Widowed" <%= (currentUser.profile && currentUser.profile.maritalStatus === 'Widowed') ? 'selected' : '' %>>Widowed</option>
+                  <option value="Other" <%= (currentUser.profile && currentUser.profile.maritalStatus === 'Other') ? 'selected' : '' %>>Other</option>
+                </select>
+              </div>
+              <div>
+                <label class="label">Children</label>
+                <select name="children" class="select select-bordered w-full">
+                  <option value="Yes" <%= (currentUser.profile && currentUser.profile.children === 'Yes') ? 'selected' : '' %>>Yes</option>
+                  <option value="No" <%= (currentUser.profile && currentUser.profile.children === 'No') ? 'selected' : '' %>>No</option>
+                  <option value="Prefer not to say" <%= (currentUser.profile && currentUser.profile.children === 'Prefer not to say') ? 'selected' : '' %>>Prefer not to say</option>
+                </select>
+              </div>
+              <div>
+                <label class="label">Number of Children</label>
+                <input type="number" name="numChildren" value="<%= currentUser.profile ? currentUser.profile.numChildren : '' %>" class="input input-bordered w-full" min="0">
+              </div>
+              <div>
+                <label class="label">Oldest Child Age</label>
+                <input type="number" name="oldestChildAge" value="<%= currentUser.profile ? currentUser.profile.oldestChildAge : '' %>" class="input input-bordered w-full" min="0">
+              </div>
+              <div>
+                <label class="label">Youngest Child Age</label>
+                <input type="number" name="youngestChildAge" value="<%= currentUser.profile ? currentUser.profile.youngestChildAge : '' %>" class="input input-bordered w-full" min="0">
+              </div>
+              <div>
+                <label class="label">Wants Children</label>
+                <select name="wantsChildren" class="select select-bordered w-full">
+                  <option value="Yes" <%= (currentUser.profile && currentUser.profile.wantsChildren === 'Yes') ? 'selected' : '' %>>Yes</option>
+                  <option value="No" <%= (currentUser.profile && currentUser.profile.wantsChildren === 'No') ? 'selected' : '' %>>No</option>
+                  <option value="Maybe" <%= (currentUser.profile && currentUser.profile.wantsChildren === 'Maybe') ? 'selected' : '' %>>Maybe</option>
+                  <option value="Prefer not to say" <%= (currentUser.profile && currentUser.profile.wantsChildren === 'Prefer not to say') ? 'selected' : '' %>>Prefer not to say</option>
+                </select>
+              </div>
+              <div>
+                <label class="label">Pets</label>
+                <input type="text" name="pets" value="<%= currentUser.profile && currentUser.profile.pets ? currentUser.profile.pets.join(', ') : '' %>" class="input input-bordered w-full" placeholder="e.g., Dog, Cat">
+              </div>
+              <div>
+                <label class="label">Occupation</label>
+                <input type="text" name="occupation" value="<%= currentUser.profile ? currentUser.profile.occupation : '' %>" class="input input-bordered w-full">
+              </div>
+              <div>
+                <label class="label">Employment Status</label>
+                <select name="employmentStatus" class="select select-bordered w-full">
+                  <option value="Employed" <%= (currentUser.profile && currentUser.profile.employmentStatus === 'Employed') ? 'selected' : '' %>>Employed</option>
+                  <option value="Unemployed" <%= (currentUser.profile && currentUser.profile.employmentStatus === 'Unemployed') ? 'selected' : '' %>>Unemployed</option>
+                  <option value="Student" <%= (currentUser.profile && currentUser.profile.employmentStatus === 'Student') ? 'selected' : '' %>>Student</option>
+                  <option value="Other" <%= (currentUser.profile && currentUser.profile.employmentStatus === 'Other') ? 'selected' : '' %>>Other</option>
+                </select>
+              </div>
+              <div>
+                <label class="label">Annual Income</label>
+                <input type="text" name="annualIncome" value="<%= currentUser.profile ? currentUser.profile.annualIncome : '' %>" class="input input-bordered w-full" placeholder="e.g., $50,000+">
+              </div>
+              <div>
+                <label class="label">Living Situation</label>
+                <select name="livingSituation" class="select select-bordered w-full">
+                  <option value="Alone" <%= (currentUser.profile && currentUser.profile.livingSituation === 'Alone') ? 'selected' : '' %>>Alone</option>
+                  <option value="With Family" <%= (currentUser.profile && currentUser.profile.livingSituation === 'With Family') ? 'selected' : '' %>>With Family</option>
+                  <option value="With Roommates" <%= (currentUser.profile && currentUser.profile.livingSituation === 'With Roommates') ? 'selected' : '' %>>With Roommates</option>
+                  <option value="Other" <%= (currentUser.profile && currentUser.profile.livingSituation === 'Other') ? 'selected' : '' %>>Other</option>
+                </select>
+              </div>
+              <div>
+                <label class="label">Willing to Relocate</label>
+                <select name="willingToRelocate" class="select select-bordered w-full">
+                  <option value="Yes" <%= (currentUser.profile && currentUser.profile.willingToRelocate === 'Yes') ? 'selected' : '' %>>Yes</option>
+                  <option value="No" <%= (currentUser.profile && currentUser.profile.willingToRelocate === 'No') ? 'selected' : '' %>>No</option>
+                  <option value="Maybe" <%= (currentUser.profile && currentUser.profile.willingToRelocate === 'Maybe') ? 'selected' : '' %>>Maybe</option>
+                </select>
+              </div>
+              <div>
+                <label class="label">Relationship Looking For</label>
+                <select name="relationshipLookingFor" class="select select-bordered w-full" multiple>
+                  <option value="Friendship" <%= (currentUser.profile && currentUser.profile.relationshipLookingFor && currentUser.profile.relationshipLookingFor.includes('Friendship')) ? 'selected' : '' %>>Friendship</option>
+                  <option value="Dating" <%= (currentUser.profile && currentUser.profile.relationshipLookingFor && currentUser.profile.relationshipLookingFor.includes('Dating')) ? 'selected' : '' %>>Dating</option>
+                  <option value="Long-term" <%= (currentUser.profile && currentUser.profile.relationshipLookingFor && currentUser.profile.relationshipLookingFor.includes('Long-term')) ? 'selected' : '' %>>Long-term</option>
+                  <option value="Marriage" <%= (currentUser.profile && currentUser.profile.relationshipLookingFor && currentUser.profile.relationshipLookingFor.includes('Marriage')) ? 'selected' : '' %>>Marriage</option>
+                  <option value="Other" <%= (currentUser.profile && currentUser.profile.relationshipLookingFor && currentUser.profile.relationshipLookingFor.includes('Other')) ? 'selected' : '' %>>Other</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Background / Cultural Values -->
+        <div class="collapse collapse-arrow bg-base-100">
+          <input type="checkbox" class="peer">
+          <div class="collapse-title text-lg font-medium">Background / Cultural Values</div>
+          <div class="collapse-content">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="label">Nationality</label>
+                <input type="text" name="nationality" value="<%= currentUser.profile ? currentUser.profile.nationality : '' %>" class="input input-bordered w-full">
+              </div>
+              <div>
+                <label class="label">Education</label>
+                <select name="education" class="select select-bordered w-full">
+                  <option value="High School" <%= (currentUser.profile && currentUser.profile.education === 'High School') ? 'selected' : '' %>>High School</option>
+                  <option value="College" <%= (currentUser.profile && currentUser.profile.education === 'College') ? 'selected' : '' %>>College</option>
+                  <option value="University" <%= (currentUser.profile && currentUser.profile.education === 'University') ? 'selected' : '' %>>University</option>
+                  <option value="Graduate" <%= (currentUser.profile && currentUser.profile.education === 'Graduate') ? 'selected' : '' %>>Graduate</option>
+                  <option value="Other" <%= (currentUser.profile && currentUser.profile.education === 'Other') ? 'selected' : '' %>>Other</option>
+                </select>
+              </div>
+              <div>
+                <label class="label">Languages Spoken</label>
+                <input type="text" name="languagesSpoken" value="<%= currentUser.profile && currentUser.profile.languagesSpoken ? currentUser.profile.languagesSpoken.join(', ') : '' %>" class="input input-bordered w-full" placeholder="e.g., English, Swahili">
+              </div>
+              <div>
+                <label class="label">English Ability</label>
+                <select name="englishAbility" class="select select-bordered w-full">
+                  <option value="Fluent" <%= (currentUser.profile && currentUser.profile.englishAbility === 'Fluent') ? 'selected' : '' %>>Fluent</option>
+                  <option value="Good" <%= (currentUser.profile && currentUser.profile.englishAbility === 'Good') ? 'selected' : '' %>>Good</option>
+                  <option value="Basic" <%= (currentUser.profile && currentUser.profile.englishAbility === 'Basic') ? 'selected' : '' %>>Basic</option>
+                  <option value="None" <%= (currentUser.profile && currentUser.profile.englishAbility === 'None') ? 'selected' : '' %>>None</option>
+                </select>
+              </div>
+              <div>
+                <label class="label">French Ability</label>
+                <select name="frenchAbility" class="select select-bordered w-full">
+                  <option value="Fluent" <%= (currentUser.profile && currentUser.profile.frenchAbility === 'Fluent') ? 'selected' : '' %>>Fluent</option>
+                  <option value="Good" <%= (currentUser.profile && currentUser.profile.frenchAbility === 'Good') ? 'selected' : '' %>>Good</option>
+                  <option value="Basic" <%= (currentUser.profile && currentUser.profile.frenchAbility === 'Basic') ? 'selected' : '' %>>Basic</option>
+                  <option value="None" <%= (currentUser.profile && currentUser.profile.frenchAbility === 'None') ? 'selected' : '' %>>None</option>
+                </select>
+              </div>
+              <div>
+                <label class="label">Religion</label>
+                <select name="religion" class="select select-bordered w-full">
+                  <option value="Christian" <%= (currentUser.profile && currentUser.profile.religion === 'Christian') ? 'selected' : '' %>>Christian</option>
+                  <option value="Muslim" <%= (currentUser.profile && currentUser.profile.religion === 'Muslim') ? 'selected' : '' %>>Muslim</option>
+                  <option value="Traditional" <%= (currentUser.profile && currentUser.profile.religion === 'Traditional') ? 'selected' : '' %>>Traditional</option>
+                  <option value="Other" <%= (currentUser.profile && currentUser.profile.religion === 'Other') ? 'selected' : '' %>>Other</option>
+                  <option value="None" <%= (currentUser.profile && currentUser.profile.religion === 'None') ? 'selected' : '' %>>None</option>
+                </select>
+              </div>
+              <div>
+                <label class="label">Religious Values</label>
+                <input type="text" name="religiousValues" value="<%= currentUser.profile ? currentUser.profile.religiousValues : '' %>" class="input input-bordered w-full" placeholder="Describe your values">
+              </div>
+              <div>
+                <label class="label">Polygamy</label>
+                <select name="polygamy" class="select select-bordered w-full">
+                  <option value="Acceptable" <%= (currentUser.profile && currentUser.profile.polygamy === 'Acceptable') ? 'selected' : '' %>>Acceptable</option>
+                  <option value="Not Acceptable" <%= (currentUser.profile && currentUser.profile.polygamy === 'Not Acceptable') ? 'selected' : '' %>>Not Acceptable</option>
+                  <option value="Neutral" <%= (currentUser.profile && currentUser.profile.polygamy === 'Neutral') ? 'selected' : '' %>>Neutral</option>
+                </select>
+              </div>
+              <div>
+                <label class="label">Star Sign</label>
+                <select name="starSign" class="select select-bordered w-full">
+                  <option value="Aries" <%= (currentUser.profile && currentUser.profile.starSign === 'Aries') ? 'selected' : '' %>>Aries</option>
+                  <option value="Taurus" <%= (currentUser.profile && currentUser.profile.starSign === 'Taurus') ? 'selected' : '' %>>Taurus</option>
+                  <option value="Gemini" <%= (currentUser.profile && currentUser.profile.starSign === 'Gemini') ? 'selected' : '' %>>Gemini</option>
+                  <option value="Cancer" <%= (currentUser.profile && currentUser.profile.starSign === 'Cancer') ? 'selected' : '' %>>Cancer</option>
+                  <option value="Leo" <%= (currentUser.profile && currentUser.profile.starSign === 'Leo') ? 'selected' : '' %>>Leo</option>
+                  <option value="Virgo" <%= (currentUser.profile && currentUser.profile.starSign === 'Virgo') ? 'selected' : '' %>>Virgo</option>
+                  <option value="Libra" <%= (currentUser.profile && currentUser.profile.starSign === 'Libra') ? 'selected' : '' %>>Libra</option>
+                  <option value="Scorpio" <%= (currentUser.profile && currentUser.profile.starSign === 'Scorpio') ? 'selected' : '' %>>Scorpio</option>
+                  <option value="Sagittarius" <%= (currentUser.profile && currentUser.profile.starSign === 'Sagittarius') ? 'selected' : '' %>>Sagittarius</option>
+                  <option value="Capricorn" <%= (currentUser.profile && currentUser.profile.starSign === 'Capricorn') ? 'selected' : '' %>>Capricorn</option>
+                  <option value="Aquarius" <%= (currentUser.profile && currentUser.profile.starSign === 'Aquarius') ? 'selected' : '' %>>Aquarius</option>
+                  <option value="Pisces" <%= (currentUser.profile && currentUser.profile.starSign === 'Pisces') ? 'selected' : '' %>>Pisces</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Hobbies & Interests -->
+        <div class="collapse collapse-arrow bg-base-100">
+          <input type="checkbox" class="peer">
+          <div class="collapse-title text-lg font-medium">Hobbies & Interests</div>
+          <div class="collapse-content">
+            <div class="space-y-4">
+              <div>
+                <label class="label">Hobbies & Interests</label>
+                <input type="text" name="hobbiesInterests" value="<%= currentUser.profile && currentUser.profile.hobbiesInterests ? currentUser.profile.hobbiesInterests.join(', ') : '' %>" class="input input-bordered w-full" placeholder="e.g., Music, Dance, Cooking">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Personality Insights -->
+        <div class="collapse collapse-arrow bg-base-100">
+          <input type="checkbox" class="peer">
+          <div class="collapse-title text-lg font-medium">Personality Insights</div>
+          <div class="collapse-content">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="label">Early Bird or Night Owl</label>
+                <select name="earlyBirdOrNightOwl" class="select select-bordered w-full">
+                  <option value="Early Bird" <%= (currentUser.profile && currentUser.profile.earlyBirdOrNightOwl === 'Early Bird') ? 'selected' : '' %>>Early Bird</option>
+                  <option value="Night Owl" <%= (currentUser.profile && currentUser.profile.earlyBirdOrNightOwl === 'Night Owl') ? 'selected' : '' %>>Night Owl</option>
+                  <option value="Both" <%= (currentUser.profile && currentUser.profile.earlyBirdOrNightOwl === 'Both') ? 'selected' : '' %>>Both</option>
+                </select>
+              </div>
+              <div>
+                <label class="label">Handle Stress</label>
+                <input type="text" name="handleStress" value="<%= currentUser.profile ? currentUser.profile.handleStress : '' %>" class="input input-bordered w-full" placeholder="How do you handle stress?">
+              </div>
+              <div>
+                <label class="label">Ideal Weekend</label>
+                <input type="text" name="idealWeekend" value="<%= currentUser.profile ? currentUser.profile.idealWeekend : '' %>" class="input input-bordered w-full" placeholder="Describe your ideal weekend">
+              </div>
+              <div>
+                <label class="label">Humor Importance</label>
+                <select name="humorImportance" class="select select-bordered w-full">
+                  <option value="Very Important" <%= (currentUser.profile && currentUser.profile.humorImportance === 'Very Important') ? 'selected' : '' %>>Very Important</option>
+                  <option value="Somewhat Important" <%= (currentUser.profile && currentUser.profile.humorImportance === 'Somewhat Important') ? 'selected' : '' %>>Somewhat Important</option>
+                  <option value="Not Important" <%= (currentUser.profile && currentUser.profile.humorImportance === 'Not Important') ? 'selected' : '' %>>Not Important</option>
+                </select>
+              </div>
+              <div>
+                <label class="label">Planner or Spontaneous</label>
+                <select name="plannerOrSpontaneous" class="select select-bordered w-full">
+                  <option value="Planner" <%= (currentUser.profile && currentUser.profile.plannerOrSpontaneous === 'Planner') ? 'selected' : '' %>>Planner</option>
+                  <option value="Spontaneous" <%= (currentUser.profile && currentUser.profile.plannerOrSpontaneous === 'Spontaneous') ? 'selected' : '' %>>Spontaneous</option>
+                  <option value="Both" <%= (currentUser.profile && currentUser.profile.plannerOrSpontaneous === 'Both') ? 'selected' : '' %>>Both</option>
+                </select>
+              </div>
+              <div>
+                <label class="label">Favorite Music</label>
+                <input type="text" name="favoriteMusic" value="<%= currentUser.profile ? currentUser.profile.favoriteMusic : '' %>" class="input input-bordered w-full" placeholder="e.g., Afrobeats, Amapiano">
+              </div>
+              <div>
+                <label class="label">Favorite Book/Genre</label>
+                <input type="text" name="favoriteBook" value="<%= currentUser.profile ? currentUser.profile.favoriteBook : '' %>" class="input input-bordered w-full" placeholder="e.g., Fiction, Chimamanda Ngozi Adichie">
+              </div>
+              <div>
+                <label class="label">Favorite Movie/Genre</label>
+                <input type="text" name="favoriteMovie" value="<%= currentUser.profile ? currentUser.profile.favoriteMovie : '' %>" class="input input-bordered w-full" placeholder="e.g., Action, Black Panther">
+              </div>
+              <div>
+                <label class="label">Enjoy Cooking</label>
+                <select name="enjoyCooking" class="select select-bordered w-full">
+                  <option value="Yes" <%= (currentUser.profile && currentUser.profile.enjoyCooking === 'Yes') ? 'selected' : '' %>>Yes</option>
+                  <option value="No" <%= (currentUser.profile && currentUser.profile.enjoyCooking === 'No') ? 'selected' : '' %>>No</option>
+                  <option value="Sometimes" <%= (currentUser.profile && currentUser.profile.enjoyCooking === 'Sometimes') ? 'selected' : '' %>>Sometimes</option>
+                </select>
+              </div>
+              <div>
+                <label class="label">Travel Importance</label>
+                <select name="travelImportance" class="select select-bordered w-full">
+                  <option value="Very Important" <%= (currentUser.profile && currentUser.profile.travelImportance === 'Very Important') ? 'selected' : '' %>>Very Important</option>
+                  <option value="Somewhat Important" <%= (currentUser.profile && currentUser.profile.travelImportance === 'Somewhat Important') ? 'selected' : '' %>>Somewhat Important</option>
+                  <option value="Not Important" <%= (currentUser.profile && currentUser.profile.travelImportance === 'Not Important') ? 'selected' : '' %>>Not Important</option>
+                </select>
+              </div>
+              <div>
+                <label class="label">Preferred Way to Stay Active</label>
+                <input type="text" name="stayActive" value="<%= currentUser.profile ? currentUser.profile.stayActive : '' %>" class="input input-bordered w-full" placeholder="e.g., Running, Yoga">
+              </div>
+              <div>
+                <label class="label">Comfort with PDA</label>
+                <select name="pdaComfort" class="select select-bordered w-full">
+                  <option value="Comfortable" <%= (currentUser.profile && currentUser.profile.pdaComfort === 'Comfortable') ? 'selected' : '' %>>Comfortable</option>
+                  <option value="Uncomfortable" <%= (currentUser.profile && currentUser.profile.pdaComfort === 'Uncomfortable') ? 'selected' : '' %>>Uncomfortable</option>
+                  <option value="Depends" <%= (currentUser.profile && currentUser.profile.pdaComfort === 'Depends') ? 'selected' : '' %>>Depends</option>
+                </select>
+              </div>
+              <div>
+                <label class="label">Communication Style</label>
+                <input type="text" name="communicationStyle" value="<%= currentUser.profile ? currentUser.profile.communicationStyle : '' %>" class="input input-bordered w-full" placeholder="e.g., Direct, Gentle">
+              </div>
+              <div>
+                <label class="label">How do you handle disagreements</label>
+                <input type="text" name="handleDisagreements" value="<%= currentUser.profile ? currentUser.profile.handleDisagreements : '' %>" class="input input-bordered w-full" placeholder="e.g., Talk it out, Take time to cool off">
+              </div>
+              <div>
+                <label class="label">Love Language</label>
+                <input type="text" name="loveLanguage" value="<%= currentUser.profile ? currentUser.profile.loveLanguage : '' %>" class="input input-bordered w-full" placeholder="e.g., Words of Affirmation, Acts of Service">
+              </div>
+              <div>
+                <label class="label">Introvert or Extrovert</label>
+                <select name="introvertOrExtrovert" class="select select-bordered w-full">
+                  <option value="Introvert" <%= (currentUser.profile && currentUser.profile.introvertOrExtrovert === 'Introvert') ? 'selected' : '' %>>Introvert</option>
+                  <option value="Extrovert" <%= (currentUser.profile && currentUser.profile.introvertOrExtrovert === 'Extrovert') ? 'selected' : '' %>>Extrovert</option>
+                  <option value="Ambivert" <%= (currentUser.profile && currentUser.profile.introvertOrExtrovert === 'Ambivert') ? 'selected' : '' %>>Ambivert</option>
+                </select>
+              </div>
+              <div>
+                <label class="label">Family Importance</label>
+                <select name="familyImportance" class="select select-bordered w-full">
+                  <option value="Very Important" <%= (currentUser.profile && currentUser.profile.familyImportance === 'Very Important') ? 'selected' : '' %>>Very Important</option>
+                  <option value="Somewhat Important" <%= (currentUser.profile && currentUser.profile.familyImportance === 'Somewhat Important') ? 'selected' : '' %>>Somewhat Important</option>
+                  <option value="Not Important" <%= (currentUser.profile && currentUser.profile.familyImportance === 'Not Important') ? 'selected' : '' %>>Not Important</option>
+                </select>
+              </div>
+              <div>
+                <label class="label">Ideal Date</label>
+                <input type="text" name="idealDate" value="<%= currentUser.profile ? currentUser.profile.idealDate : '' %>" class="input input-bordered w-full" placeholder="e.g., Dinner, Cultural Festival">
+              </div>
+              <div>
+                <label class="label">Willing to Try New Things</label>
+                <input type="text" name="tryNewThings" value="<%= currentUser.profile ? currentUser.profile.tryNewThings : '' %>" class="input input-bordered w-full" placeholder="e.g., New foods, Travel destinations">
+              </div>
+              <div>
+                <label class="label">Pet Peeve</label>
+                <input type="text" name="petPeeve" value="<%= currentUser.profile ? currentUser.profile.petPeeve : '' %>" class="input input-bordered w-full" placeholder="e.g., Loud chewing, Tardiness">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Submit Button -->
+        <div class="text-center">
+          <button type="submit" class="btn btn-primary">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal" id="alertModal">
+    <div class="modal-box">
+      <h3 class="font-bold text-lg">Alert</h3>
+      <p class="py-4" id="alertMessage"></p>
+      <div class="modal-action">
+        <button class="btn btn-ghost" onclick="closeModal('alertModal')">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <%- include('partials/footer.ejs') %>
+
+  <script>
+    const socket = io();
+    const currentUserId = '<%= currentUser._id %>';
+
+    socket.emit('register_for_notifications', currentUserId);
+
+    socket.on('new_notification', ({ sender, message, type }) => {
+      console.log('Notification:', { sender, message, type });
+      if (type === 'match') {
+        alertModal('New Match', `${message}`);
+        setTimeout(() => window.location.reload(), 2000);
+      } else if (type === 'like') {
+        alertModal('New Like', `${message}`);
+      }
+    });
+
+    function closeModal(modalId) {
+      const modal = document.getElementById(modalId);
+      if (modal) modal.classList.remove('modal-open');
+    }
+
+    function alertModal(title, message) {
+      const modal = document.getElementById('alertModal');
+      const alertMessage = document.getElementById('alertMessage');
+      if (modal && alertMessage) {
+        alertMessage.innerText = message;
+        modal.classList.add('modal-open');
+      }
+    }
+  </script>
+</body>
+</html>

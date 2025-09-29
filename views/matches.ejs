@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="cupcake">
+  <%- include('partials/head.ejs', { pageTitle: 'Matches' }) %>
+  <body class="bg-base-100 min-h-screen flex flex-col">
+    <%- include('partials/navbar.ejs') %>
+
+    <main class="container mx-auto px-4 py-6 flex-grow">
+      <header class="mb-6">
+        <h1 class="text-2xl font-bold">Matches</h1>
+        <p class="text-sm opacity-70">Message mutual matches, or like back to unlock chat.</p>
+      </header>
+
+      <% if (!matches || matches.length === 0) { %>
+        <div class="max-w-xl mx-auto bg-base-200 rounded-xl p-8 text-center">
+          <p>No matches yet. Keep discovering on the dashboard.</p>
+          <a href="/dashboard" class="btn btn-primary mt-3">Discover</a>
+        </div>
+      <% } %>
+
+      <div class="grid gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
+        <% (matches || []).forEach(m => { 
+             const photos = (m.profile?.photos || []);
+             const photo  = photos[0] || '/images/default-avatar.png';
+        %>
+          <article class="card bg-base-100 shadow hover:shadow-lg transition">
+            <figure class="relative aspect-[4/5] overflow-hidden bg-base-200">
+              <img src="<%= photo %>" alt="<%= m.username %>" class="w-full h-full object-cover">
+
+              <% if (m.unreadCount > 0) { %>
+                <span class="absolute top-2 right-2 badge badge-error badge-sm"><%= m.unreadCount %></span>
+              <% } %>
+
+              <div class="absolute left-2 top-2 flex gap-1">
+                <% if (m.isNew)        { %><span class="badge badge-accent badge-xs">NEW</span><% } %>
+                <% if (m.verifiedAt)   { %><span class="badge badge-success badge-xs">Verified</span><% } %>
+                <% if (m.lastActive && (Date.now()-new Date(m.lastActive).getTime()<5*60*1000)) { %>
+                  <span class="badge badge-info badge-xs">Online</span>
+                <% } %>
+              </div>
+            </figure>
+
+            <div class="card-body p-3">
+              <h3 class="font-semibold text-sm truncate">
+                <%= m.username %><% if (m.profile?.age){ %>, <%= m.profile.age %><% } %>
+              </h3>
+              <p class="text-[11px] opacity-70 truncate">
+                <%= [m.profile?.city, m.profile?.country].filter(Boolean).join(', ') %>
+              </p>
+
+              <% if (m.lastMessage) { %>
+                <div class="mt-2 text-[12px] bg-base-200 rounded p-2">
+                  <span class="opacity-70"><%= m.lastMessage.mine ? 'You: ' : '' %></span>
+                  <span class="line-clamp-2"><%= m.lastMessage.content %></span>
+                  <div class="text-[10px] opacity-60 mt-1">
+                    <%= new Date(m.lastMessage.createdAt).toLocaleString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' }) %>
+                  </div>
+                </div>
+              <% } %>
+
+              <div class="mt-3 grid grid-cols-2 gap-2">
+                <a href="/users/<%= m._id %>" class="btn btn-ghost btn-xs">Profile</a>
+
+                <% if (m.isMutual) { %>
+                  <a class="btn btn-primary btn-xs" href="/chat/<%= m._id %>">Message</a>
+                <% } else if (m.likedMeOnly) { %>
+                  <button class="btn btn-accent btn-xs like-back" data-user-id="<%= m._id %>" data-username="<%= m.username %>">
+                    Like back
+                  </button>
+                <% } else { %>
+                  <button class="btn btn-ghost btn-xs" disabled>Pending</button>
+                <% } %>
+              </div>
+            </div>
+          </article>
+        <% }) %>
+      </div>
+    </main>
+
+    <%- include('partials/footer.ejs') %>
+
+    <!-- moved inline JS to /public/js/matches.js for CSP -->
+    <script src="/js/matches.js" defer></script>
+  </body>
+</html>

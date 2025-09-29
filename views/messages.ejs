@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="afro">
+<head>
+  <%- include('partials/head.ejs', { pageTitle: 'Messages' }) %>
+</head>
+<body class="bg-base-100 min-h-screen">
+  <%- include('partials/navbar.ejs', { currentUser, unreadMessages, unreadNotificationCount }) %>
+
+  <!-- Hidden IDs for JS -->
+  <input type="hidden" id="currentUserId" value="<%= currentUser?._id %>">
+  <input type="hidden" id="peerId" value="<%= peer?._id || '' %>">
+
+  <main class="max-w-6xl mx-auto p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+    <!-- Threads (left) -->
+    <aside class="md:col-span-1">
+      <div class="flex items-center justify-between mb-2">
+        <h1 class="text-xl font-bold">Messages</h1>
+        <div class="flex items-center gap-2">
+          <button id="enterManage" class="btn btn-ghost btn-xs">Manage</button>
+          <button id="cancelManage" class="btn btn-ghost btn-xs hidden">Cancel</button>
+          <button id="deleteThreads" class="btn btn-error btn-xs hidden">Delete</button>
+        </div>
+      </div>
+
+      <ul id="threadList" class="menu bg-base-100 rounded-xl border">
+        <% (matches || []).forEach(u => { %>
+          <li class="border-b last:border-0">
+            <a href="/messages?with=<%= u._id %>" data-user-id="<%= u._id %>" class="flex items-center gap-3">
+              <div class="avatar">
+                <div class="w-10 rounded-full">
+                  <img src="<%= (u.profile?.photos?.[0] || '/img/placeholder-avatar.png') %>" alt="">
+                </div>
+              </div>
+              <div class="min-w-0">
+                <div class="truncate"><%= u.username %></div>
+                <div class="text-xs opacity-70">
+                  <% if (u.lastMessage) { %>
+                    <%= (u.lastMessage?.sender?._id?.toString() === currentUser._id.toString() ? 'You: ' : (u.username + ': ')) %>
+                    <%= (u.lastMessage?.content || '').slice(0, 40) %>
+                  <% } else { %>
+                    No messages yet
+                  <% } %>
+                </div>
+              </div>
+              <input type="checkbox" class="checkbox checkbox-xs threadChk hidden ml-auto" data-user-id="<%= u._id %>">
+            </a>
+          </li>
+        <% }) %>
+      </ul>
+    </aside>
+
+    <!-- Chat (right) -->
+    <section class="md:col-span-2">
+      <% if (!peer) { %>
+        <div class="card bg-base-100 border shadow p-6 text-center">
+          <div class="text-lg">Pick a conversation on the left.</div>
+        </div>
+      <% } else { %>
+
+        <!-- Chat header (with Video button) -->
+        <div class="card bg-base-100 border shadow mb-3">
+          <div class="flex items-center justify-between px-4 py-3">
+            <div class="flex items-center gap-3">
+              <div class="avatar">
+                <div class="w-10 rounded-full">
+                  <img src="<%= (peer.profile?.photos?.[0] || '/img/placeholder-avatar.png') %>" alt="">
+                </div>
+              </div>
+              <div>
+                <div class="font-semibold"><%= peer.username %></div>
+                <div class="text-xs opacity-70">
+                  <% if (peer.lastActive) { %>
+                    Active <%= new Date(peer.lastActive).toLocaleString() %>
+                  <% } %>
+                </div>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <!-- Video chat button (server will enforce eligibility on request) -->
+              <button
+                class="btn btn-sm btn-ghost video-call-btn"
+                data-peer-id="<%= peer._id %>"
+                title="Video chat (Elite)">
+                📹 Video chat
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Multi-select toolbar (per-message delete) -->
+        <div id="msToolbar" class="hidden mb-2 flex items-center justify-between">
+          <div class="text-sm">Selected: <span id="msCount">0</span></div>
+          <div class="flex items-center gap-2">
+            <button id="msDelete" class="btn btn-error btn-xs">Delete</button>
+            <button id="msCancel" class="btn btn-ghost btn-xs">Cancel</button>
+          </div>
+        </div>
+
+        <!-- Chat scroll area -->
+        <div id="chatScroll" class="card bg-base-100 border shadow p-3 space-y-2 max-h-[70vh] overflow-y-auto">
+          <% (initialHistory || []).forEach(m => { const mine = String(m.sender) === String(currentUser._id); %>
+            <div class="msg-row flex <%= mine ? 'justify-end' : 'justify-start' %>" data-mid="<%= m._id %>">
+              <div class="max-w-[80%] rounded-2xl px-3 py-2 <%= mine ? 'bg-primary text-white' : 'bg-gray-100' %>">
+                <div class="whitespace-pre-wrap break-words text-sm"><%= m.content %></div>
+                <div class="text-[10px] opacity-70 mt-1"><%= new Date(m.createdAt).toLocaleString() %></div>
+              </div>
+            </div>
+          <% }) %>
+        </div>
+
+        <!-- Composer -->
+        <form id="chatForm" class="mt-3 flex gap-2" action="/api/messages" method="post" onsubmit="return false;">
+          <input type="hidden" name="to" value="<%= peer._id %>">
+          <input id="chatInput" name="content" class="input input-bordered w-full" placeholder="Type a message…">
+          <button class="btn btn-primary">Send</button>
+        </form>
+      <% } %>
+    </section>
+  </main>
+
+  <!-- RTC modal (shared) -->
+  <dialog id="rtc-modal" class="modal">
+    <div class="modal-box p-0">
+      <div class="flex items-center justify-between px-4 py-3 border-b">
+        <div class="font-semibold">Video chat</div>
+        <button class="btn btn-ghost btn-xs rtc-hangup">Hang up</button>
+      </div>
+      <div class="grid grid-cols-1 gap-2 p-3">
+        <video id="rtc-remote" playsinline autoplay class="w-full rounded bg-base-200"></video>
+        <video id="rtc-local"  playsinline autoplay muted class="w-40 h-28 rounded bg-base-200 self-end"></video>
+      </div>
+      <div class="px-4 pb-4 flex gap-2 justify-end">
+        <button class="btn btn-outline btn-sm rtc-mute">Mute</button>
+        <button class="btn btn-outline btn-sm rtc-video">Video</button>
+        <button class="btn btn-error btn-sm rtc-hangup">End</button>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
+
+  <script src="/socket.io/socket.io.js" defer></script>
+  <script src="/js/page-messages.js" defer></script>
+</body>
+</html>

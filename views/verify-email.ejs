@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="afro">
+  <%- include('partials/head.ejs', { pageTitle: 'Verify email' }) %>
+  <body class="bg-base-100 min-h-screen flex flex-col">
+
+    <%- include('partials/navbar.ejs') %>
+
+    <main class="container mx-auto p-4 flex-grow max-w-md">
+      <h1 class="text-2xl font-bold mb-2">Verify your email</h1>
+      <p class="opacity-70 mb-4">We’ll send a one-time code to confirm it’s you.</p>
+
+      <% if (flash) { %>
+        <div class="alert alert-info mb-4"><%= flash %></div>
+      <% } %>
+
+      <% if (state === 'enter') { %>
+        <form method="post" action="/verify-email/request" class="card bg-base-100 border shadow p-4">
+          <label class="form-control w-full">
+            <span class="label-text mb-1">Email address</span>
+            <input
+              name="email"
+              type="email"
+              required
+              class="input input-bordered w-full"
+              placeholder="you@example.com"
+              value="<%= currentUser.email || '' %>">
+          </label>
+          <button class="btn btn-primary mt-4" type="submit">Send code</button>
+        </form>
+
+      <% } else if (state === 'code') { %>
+        <div class="card bg-base-100 border shadow p-4">
+          <div class="mb-2 text-sm">
+            We sent a code to
+            <span class="font-semibold"><%= currentUser.email %></span>.
+          </div>
+          <form method="post" action="/verify-email/confirm" class="flex gap-2">
+            <input
+              name="code"
+              type="text"
+              inputmode="numeric"
+              pattern="[0-9]*"
+              maxlength="6"
+              class="input input-bordered w-full"
+              placeholder="Enter 6-digit code"
+              required>
+            <button class="btn btn-primary" type="submit">Verify</button>
+          </form>
+          <form method="post" action="/verify-email/request" class="mt-2 text-sm">
+            <button class="btn btn-link p-0">Resend code</button>
+          </form>
+        </div>
+
+      <% } else if (state === 'done') { %>
+        <div class="alert alert-success">Email verified 🎉</div>
+        <a href="/dashboard" class="btn btn-ghost mt-3">Back to Discover</a>
+      <% } %>
+    </main>
+
+    <%- include('partials/footer.ejs') %>
+
+    <!-- Sockets (singleton) -->
+    <script src="/socket.io/socket.io.js" defer></script>
+    <script src="/js/socket.io.js" defer></script>
+  </body>
+</html>

@@ -1,0 +1,85 @@
+<!-- Alert Modal -->
+<dialog id="alertModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="alertTitle" aria-describedby="alertMessage">
+  <div class="modal-box">
+    <form method="dialog">
+      <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" aria-label="Close" onclick="closeDialog('alertModal')">✕</button>
+    </form>
+    <h3 id="alertTitle" class="font-bold text-lg">Notice</h3>
+    <p id="alertMessage" class="py-2">Message body</p>
+    <div class="modal-action">
+      <button class="btn btn-primary" onclick="closeDialog('alertModal')">OK</button>
+    </div>
+  </div>
+</dialog>
+
+<!-- Match Modal, fallback to overlay -->
+<dialog id="matchModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="matchHeading">
+  <div class="modal-box text-center">
+    <form method="dialog">
+      <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" aria-label="Close" onclick="closeDialog('matchModal')">✕</button>
+    </form>
+    <h3 id="matchHeading" class="font-bold text-2xl mb-2">It is a Match</h3>
+    <p class="text-gray-600">You and <span id="matchName">someone</span> like each other.</p>
+    <div class="modal-action justify-center">
+      <a id="matchMessageBtn" href="/messages" class="btn btn-primary rounded-full">Send a message</a>
+      <button class="btn btn-ghost rounded-full" onclick="closeDialog('matchModal')">Keep browsing</button>
+    </div>
+  </div>
+</dialog>
+
+<!-- Report User Modal, if used -->
+<dialog id="reportUserModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="reportHeading">
+  <div class="modal-box">
+    <form method="dialog">
+      <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" aria-label="Close" onclick="closeDialog('reportUserModal')">✕</button>
+    </form>
+    <h3 id="reportHeading" class="font-bold text-lg">Report <span id="reportedUserName"></span></h3>
+    <p class="py-2">Tell us what happened.</p>
+    <textarea class="textarea textarea-bordered w-full" rows="4" placeholder="Reason..."></textarea>
+    <div class="modal-action">
+      <button class="btn" onclick="closeDialog('reportUserModal')">Cancel</button>
+      <button class="btn btn-error">Submit</button>
+    </div>
+  </div>
+</dialog>
+
+<!-- Focus trap and open or close helpers -->
+<script>
+(function(){
+  var FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  var lastOpener = null;
+
+  function trap(dialog){
+    dialog.addEventListener('keydown', function(e){
+      if (e.key !== 'Tab') return;
+      var nodes = Array.prototype.slice.call(dialog.querySelectorAll(FOCUSABLE)).filter(function(el){ return el.offsetParent !== null; });
+      if (!nodes.length) return;
+      var first = nodes[0];
+      var last = nodes[nodes.length - 1];
+      if (e.shiftKey && document.activeElement === first){ e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last){ e.preventDefault(); first.focus(); }
+    });
+  }
+
+  window.openDialog = function(id, opener){
+    var d = document.getElementById(id);
+    if (!d) return;
+    lastOpener = opener || document.activeElement;
+    if (typeof d.showModal === 'function') d.showModal(); else d.setAttribute('open', '');
+    var first = d.querySelector(FOCUSABLE);
+    if (first) first.focus();
+  };
+
+  window.closeDialog = function(id){
+    var d = document.getElementById(id);
+    if (!d) return;
+    if (typeof d.close === 'function') d.close(); else d.removeAttribute('open');
+    if (lastOpener) try { lastOpener.focus(); } catch(_) {}
+  };
+
+  ['alertModal','matchModal','reportUserModal'].forEach(function(id){
+    var d = document.getElementById(id);
+    if (d) trap(d);
+  });
+})();
+</script>

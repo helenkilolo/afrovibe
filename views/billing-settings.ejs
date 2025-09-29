@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="cupcake">
+<%- include('partials/head.ejs', { pageTitle: 'Billing Settings' }) %>
+<body data-theme="cupcake" class="bg-base-100 min-h-screen flex flex-col">
+  <%- include('partials/navbar.ejs') %>
+
+  <main class="container mx-auto mt-8 p-6 flex-grow">
+      <div class="card w-full max-w-2xl mx-auto bg-base-200 shadow-xl p-8 rounded-2xl">
+          <h1 class="text-3xl font-bold text-center text-primary mb-6">Billing Settings</h1>
+          <p class="text-center text-gray-600 mb-8">Manage your subscription and payment information here.</p>
+
+          <% if (error) { %>
+              <div role="alert" class="alert alert-error mb-4">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  <span><%= error %></span>
+              </div>
+          <% } %>
+          <% if (success) { %>
+              <div role="alert" class="alert alert-success mb-4">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  <span><%= success %></span>
+              </div>
+          <% } %>
+
+          <div class="card bg-accent text-accent-content p-6 rounded-2xl text-center mb-6 shadow-md">
+  <p class="text-lg font-semibold mb-2">Current Plan: Free Tier</p>
+  <p>Upgrade to unlock premium features like unlimited likes, advanced filters, and more visibility!</p>
+  <a href="/upgrade" 
+     class="mt-4 btn btn-neutral text-white font-bold py-2 px-6 rounded-full transition duration-300 shadow-lg">
+     Upgrade Now
+  </a>
+</div>
+
+
+          <form action="/settings/billing" method="POST" class="space-y-6">
+              <h2 class="text-xl font-semibold text-gray-800 mb-4">Payment Information (Placeholder)</h2>
+              <div>
+                  <label for="cardNumber" class="label">
+                      <span class="label-text">Card Number:</span>
+                  </label>
+                  <input type="text" id="cardNumber" name="cardNumber" placeholder="**** **** **** ****" class="input input-bordered w-full" disabled>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                      <label for="expiryMonth" class="label">
+                          <span class="label-text">Expiry Month:</span>
+                      </label>
+                      <input type="text" id="expiryMonth" name="expiryMonth" placeholder="MM" class="input input-bordered w-full" disabled>
+                  </div>
+                  <div>
+                      <label for="expiryYear" class="label">
+                          <span class="label-text">Expiry Year:</span>
+                      </label>
+                      <input type="text" id="expiryYear" name="expiryYear" placeholder="YY" class="input input-bordered w-full" disabled>
+                  </div>
+                  <div>
+                      <label for="cvv" class="label">
+                          <span class="label-text">CVV:</span>
+                      </label>
+                      <input type="text" id="cvv" name="cvv" placeholder="***" class="input input-bordered w-full" disabled>
+                  </div>
+              </div>
+              <div>
+                  <label for="billingAddress" class="label">
+                      <span class="label-text">Billing Address:</span>
+                  </label>
+                  <textarea id="billingAddress" name="billingAddress" rows="3" class="textarea textarea-bordered h-24 w-full" disabled>123 Main St, Anytown, USA</textarea>
+              </div>
+              <div class="text-center">
+                  <button type="submit" class="btn btn-disabled bg-gray-400 text-white font-bold py-3 px-8 rounded-full shadow-lg" disabled>Save Billing Info (Disabled)</button>
+              </div>
+          </form>
+      </div>
+  </main>
+
+  <!-- Custom Alert Modal -->
+  <dialog id="alert-modal" class="modal">
+    <div class="modal-box text-center">
+      <h3 id="alert-title" class="text-2xl font-bold mb-4"></h3>
+      <p id="alert-message" class="py-4"></p>
+      <div class="modal-action justify-center">
+          <form method="dialog">
+              <button class="btn btn-primary">OK</button>
+          </form>
+      </div>
+    </div>
+  </dialog>
+
+  <%- include('partials/footer.ejs') %>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+      // Placeholder for real-time notification socket logic
+      const socket = io();
+      // Ensure currentUser is passed to this template from the server
+      const userId = "<%= currentUser._id %>";
+      
+      // Get elements from the DOM
+      const notificationBell = document.querySelector('#notifications-link');
+      const notificationBadge = document.querySelector('#notifications-link .indicator-item');
+      
+      let notificationCount = parseInt(notificationBadge ? notificationBadge.textContent : '0');
+
+      socket.on('connect', () => {
+          console.log('Connected to socket.io');
+          socket.emit('register_for_notifications', userId);
+      });
+
+      // Handle new notification from the server
+      socket.on('new_notification', (notification) => {
+          console.log('New notification received:', notification);
+          
+          if (notificationBadge) {
+              notificationCount++;
+              notificationBadge.textContent = notificationCount;
+              notificationBadge.style.display = 'inline-flex';
+          }
+          
+          // Show an alert modal for the new notification
+          let message = "You have a new notification.";
+          if (notification.type === 'match') {
+              message = `It's a match! You and ${notification.sender.username} have liked each other.`;
+          } else if (notification.type === 'like') {
+              message = `${notification.sender.username} likes your profile!`;
+          }
+
+          showAlert('New Notification', message);
+      });
+
+      // Custom Alert Modal function
+      function showAlert(title, message) {
+          const modal = document.getElementById('alert-modal');
+          modal.querySelector('h3').textContent = title;
+          modal.querySelector('p').textContent = message;
+          modal.showModal();
+      }
+  </script>
+</body>
+</html>

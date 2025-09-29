@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="cupcake">
+  <%- include('partials/head.ejs', { pageTitle: 'Upgrade to Unlock' }) %>
+  <body class="bg-base-100 min-h-screen flex flex-col">
+    <%- include('partials/navbar.ejs') %>
+    <main class="container mx-auto p-6 flex-grow">
+      <div class="max-w-2xl mx-auto bg-white rounded-2xl shadow border p-8 text-center">
+        <h1 class="text-2xl font-bold mb-2"><%= feature || 'Premium Feature' %></h1>
+        <p class="opacity-70 mb-6">
+          Upgrade to see everyone who liked you, use advanced filters, and more.
+        </p>
+
+        <div class="grid sm:grid-cols-2 gap-4">
+          <a class="btn btn-outline" href="/dashboard">Maybe later</a>
+          <a class="btn btn-primary" href="/upgrade">Upgrade now</a>
+        </div>
+      </div>
+    </main>
+    <%- include('partials/footer.ejs') %>
+  </body>
+</html>

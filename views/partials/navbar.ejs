@@ -1,0 +1,279 @@
+<div class="navbar bg-gradient-to-r from-[#FF6B6B] to-[#FECA57] shadow-lg">
+  <!-- Left: brand + mobile menu -->
+  <div class="navbar-start">
+    <div class="dropdown">
+      <label tabindex="0" class="btn btn-ghost lg:hidden text-white" aria-label="Open menu">
+        <!-- hamburger -->
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+      </label>
+      <ul tabindex="0" class="menu menu-sm dropdown-content mt-3 z-[100] p-2 shadow bg-base-100 rounded-box w-56">
+        <li><a href="/dashboard">Home</a></li>
+        <li>
+          <a href="/messages">
+            Messages
+            <span class="badge badge-error badge-sm nav-unread-messages <%= (typeof unreadMessages !== 'undefined' && unreadMessages > 0) ? '' : 'hidden' %>">
+              <%= typeof unreadMessages !== 'undefined' && unreadMessages > 0 ? unreadMessages : '' %>
+            </span>
+          </a>
+        </li>
+        <li><a href="/matches">Matches</a></li>
+
+        <!-- Mobile: Connections (Likes You + Favorites) -->
+        <li>
+          <details>
+            <summary>Connections</summary>
+            <ul class="p-2">
+              <li><a href="/likes-you">Likes You</a></li>
+              <li><a href="/favorites">Favorites</a></li>
+              <li><a href="/viewed-you">Views</a></li>
+            </ul>
+          </details>
+        </li>
+
+        <li><a href="/advanced-search">Advanced Search</a></li>
+        <li><a href="/settings">Settings</a></li>
+        <li class="md:hidden"><a href="/notifications">
+          Notifications
+          <span class="badge badge-error badge-sm nav-unread-notifs <%= (typeof unreadNotificationCount !== 'undefined' && unreadNotificationCount > 0) ? '' : 'hidden' %>">
+            <%= typeof unreadNotificationCount !== 'undefined' && unreadNotificationCount > 0 ? unreadNotificationCount : '' %>
+          </span>
+        </a></li>
+        <% const boostActiveMobile = currentUser && currentUser.boostExpiresAt && new Date(currentUser.boostExpiresAt) > new Date(); %>
+        <% if (boostActiveMobile) { %>
+          <li class="opacity-80">
+            <a href="javascript:void(0)">
+              Boosting
+              <span id="boostCountdownMobile" class="ml-1 font-mono text-xs"
+                    data-expires="<%= new Date(currentUser.boostExpiresAt).toISOString() %>">--:--</span>
+            </a>
+          </li>
+        <% } %>
+        <li><a href="/logout">Logout</a></li>
+      </ul>
+    </div>
+
+    <a href="/dashboard" class="btn btn-ghost text-xl text-white">🌍 AfroVibe</a>
+  </div>
+
+  <!-- Center: desktop menu -->
+  <div class="navbar-center hidden lg:flex">
+    <ul class="menu menu-horizontal px-1">
+      <li><a href="/dashboard" class="text-white">Home</a></li>
+      <li>
+        <a href="/messages" class="text-white">
+          Messages
+          <span class="badge badge-error badge-sm nav-unread-messages <%= (typeof unreadMessages !== 'undefined' && unreadMessages > 0) ? '' : 'hidden' %>">
+            <%= typeof unreadMessages !== 'undefined' && unreadMessages > 0 ? unreadMessages : '' %>
+          </span>
+        </a>
+      </li>
+      <li><a href="/matches" class="text-white">Matches</a></li>
+
+      <!-- Desktop: Connections (Likes You + Favorites) -->
+      <li class="dropdown dropdown-hover">
+        <label tabindex="0" class="text-white">Connections</label>
+        <ul tabindex="0" class="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-48">
+          <li><a href="/likes-you">Likes You</a></li>
+          <li><a href="/favorites">Favorites</a></li>
+          <li><a href="/viewed-you">Views</a></li>
+        </ul>
+      </li>
+
+      <li><a href="/advanced-search" class="text-white">Advanced Search</a></li>
+      <li><a href="/settings" class="text-white">Settings</a></li>
+    </ul>
+  </div>
+  
+  <!-- Right: boost badge, notifications, avatar -->
+  <div class="navbar-end">
+    <% const boostActive = currentUser && currentUser.boostExpiresAt && new Date(currentUser.boostExpiresAt) > new Date(); %>
+    <% if (boostActive) { %>
+      <div class="mr-2 hidden md:flex items-center gap-2">
+        <span class="badge badge-warning text-black font-semibold">
+          Boosting
+          <span id="boostCountdown" class="ml-1 font-mono"
+                data-expires="<%= new Date(currentUser.boostExpiresAt).toISOString() %>">--:--</span>
+        </span>
+      </div>
+    <% } %>
+
+    <!-- Notifications (desktop) -->
+    <div class="hidden md:flex items-center mr-2">
+      <a href="/notifications" class="btn btn-ghost btn-circle text-white" aria-label="Notifications">
+        <div class="indicator">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none"
+               viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5" />
+          </svg>
+          <span class="badge badge-error badge-sm indicator-item nav-unread-notifs <%= (typeof unreadNotificationCount !== 'undefined' && unreadNotificationCount > 0) ? '' : 'hidden' %>">
+            <%= typeof unreadNotificationCount !== 'undefined' && unreadNotificationCount > 0 ? unreadNotificationCount : '' %>
+          </span>
+        </div>
+      </a>
+    </div>
+
+    <% if (typeof likesRemaining !== 'undefined' || typeof streak !== 'undefined') { %>
+      <div class="hidden md:flex items-center gap-2 mr-2">
+        <% if (typeof streak !== 'undefined') { %>
+          <div class="flex items-center gap-2">
+            <span class="text-xs opacity-70">Streak <%= streak.day %>/<%= streak.target %></span>
+            <div class="w-20 h-1 bg-base-300 rounded-full overflow-hidden">
+              <div style="width:<%= streak.percentage %>%;" class="h-1 bg-primary"></div>
+            </div>
+          </div>
+        <% } %>
+
+        <% if (typeof likesRemaining !== 'undefined') { %>
+          <div class="text-xs opacity-80">
+            Likes: <span class="font-semibold"><%= likesRemaining >= 0 ? likesRemaining : '∞' %></span>
+          </div>
+        <% } %>
+      </div>
+    <% } %>
+
+    <!-- Avatar -->
+    <div class="dropdown dropdown-end">
+      <label tabindex="0" class="btn btn-ghost btn-circle avatar" aria-label="Open profile menu">
+        <div class="w-10 rounded-full">
+          <% if (currentUser?.profile?.photos?.length) { %>
+            <img src="<%= currentUser.profile.photos[0] %>" alt="Profile"
+                 class="object-cover"
+                 onerror="this.src='/images/default-avatar.png';">
+          <% } else { %>
+            <img src="/images/default-avatar.png" alt="Profile" class="object-cover">
+          <% } %>
+        </div>
+      </label>
+      <ul tabindex="0" class="menu menu-sm dropdown-content mt-3 z-[101] p-2 shadow bg-base-100 rounded-box w-56">
+        <li class="font-semibold px-3 py-1"><%= currentUser?.username || 'Profile' %></li>
+        <li><a href="/my-profile">My Profile</a></li>
+        <li><a href="/edit-profile">Edit Profile</a></li>
+        <li><a href="/photos">Manage Photos</a></li>
+        <li><a href="/settings">Settings</a></li>
+        <% if (boostActive) { %>
+          <li class="opacity-80">
+            <a href="javascript:void(0)">
+              Boosting
+              <span id="boostCountdownMenu" class="ml-1 font-mono text-xs"
+                    data-expires="<%= new Date(currentUser.boostExpiresAt).toISOString() %>">--:--</span>
+            </a>
+          </li>
+        <% } %>
+        <li><a href="/logout">Logout</a></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- Optional: a single overall unread badge anywhere in the navbar -->
+<!-- <span data-role="nav-unread" hidden class="badge badge-primary ml-2"></span> -->
+
+<script src="/socket.io/socket.io.js" defer></script>
+<script src="/js/socket.io.js" defer></script>
+<script src="/js/global.js" defer></script>
+<script nonce="<%= (typeof cspNonce !== 'undefined' && cspNonce) ? cspNonce : '' %>">
+(function () {
+  // Quietly bail if socket lib isn't present
+  if (typeof io !== 'function') return;
+
+  // ---- Socket singleton  ----
+  var socket = window.__navSocket || io();
+  window.__navSocket = socket;
+
+  // Register user for their room
+  var myId = '<%= currentUser?._id %>' || '';
+  if (myId) { try { socket.emit('register_for_notifications', myId); } catch (e) {} }
+
+  // ---- Helpers ----
+  function setBadge(nodes, n){
+    var v = Math.max(0, Number(n) || 0);
+    nodes.forEach(function(el){
+      if (!el) return;
+      el.textContent = v > 99 ? '99+' : (v > 0 ? String(v) : '');
+      if (v > 0) { el.classList.remove('hidden'); el.removeAttribute('hidden'); }
+      else { el.classList.add('hidden'); el.setAttribute('hidden',''); }
+    });
+  }
+
+  // Your existing badges (no markup changes):
+  // - Messages: .nav-unread-messages (mobile) + fallback to the badge inside /messages link
+  // - Notifications: .nav-unread-notifs (mobile) + desktop indicator badge inside /notifications link
+  // - Optional aggregate (if you ever add one): [data-role="nav-unread"]
+  var msgBadges   = Array.from(document.querySelectorAll('.nav-unread-messages, a[href="/messages"] .badge'));
+  var notifBadges = Array.from(document.querySelectorAll('.nav-unread-notifs, a[href="/notifications"] .indicator .badge, a[href="/notifications"] .badge'));
+  var totalBadges = Array.from(document.querySelectorAll('[data-role="nav-unread"]'));
+
+  // Start with the server-rendered numbers already in your EJS
+  var msgCount   = Number(<%= (typeof unreadMessages !== 'undefined' ? unreadMessages : 0) %>) || 0;
+  var notifCount = Number(<%= (typeof unreadNotificationCount !== 'undefined' ? unreadNotificationCount : 0) %>) || 0;
+
+  // Initial paint (matches what’s already visible, keeps things in sync)
+  setBadge(msgBadges,   msgCount);
+  setBadge(notifBadges, notifCount);
+  setBadge(totalBadges, msgCount + notifCount);
+
+  // Live absolute updates (preferred)
+  socket.on('unread_update', function (p) {
+    if (!p || typeof p.unread !== 'number') return;
+    msgCount = p.unread;
+    setBadge(msgBadges, msgCount);
+    setBadge(totalBadges, msgCount + notifCount);
+  });
+  socket.on('notif_update', function (p) {
+    if (!p || typeof p.unread !== 'number') return;
+    notifCount = p.unread;
+    setBadge(notifBadges, notifCount);
+    setBadge(totalBadges, msgCount + notifCount);
+  });
+
+  // Opportunistic bumps (if server only fires raw events)
+  socket.on('new_message', function () {
+    msgCount += 1;
+    setBadge(msgBadges, msgCount);
+    setBadge(totalBadges, msgCount + notifCount);
+  });
+  socket.on('new_notification', function () {
+    notifCount += 1;
+    setBadge(notifBadges, notifCount);
+    setBadge(totalBadges, msgCount + notifCount);
+  });
+
+  // Drift correction: refresh counts when tab regains focus
+  function refreshCounts(){
+    try {
+      Promise.all([
+        fetch('/api/unread/messages',      { credentials:'same-origin' }).then(function(r){return r.ok ? r.json() : {ok:false};}),
+        fetch('/api/unread/notifications', { credentials:'same-origin' }).then(function(r){return r.ok ? r.json() : {ok:false};})
+      ]).then(function(rs){
+        var m = rs[0], n = rs[1];
+        if (m && m.ok && typeof m.count === 'number') msgCount   = m.count;
+        if (n && n.ok && typeof n.count === 'number') notifCount = n.count;
+        setBadge(msgBadges,   msgCount);
+        setBadge(notifBadges, notifCount);
+        setBadge(totalBadges, msgCount + notifCount);
+      });
+    } catch(e){}
+  }
+  window.addEventListener('focus', refreshCounts);
+  document.addEventListener('visibilitychange', function(){ if (document.visibilityState === 'visible') refreshCounts(); });
+
+  // ---- Boost countdowns (uses your existing #boostCountdown* spans) ----
+  ['boostCountdown','boostCountdownMobile','boostCountdownMenu'].forEach(function(id){
+    var el = document.getElementById(id);
+    if (!el) return;
+    var iso = el.getAttribute('data-expires');
+    if (!iso) return;
+    var expires = new Date(iso).getTime();
+    (function tick(){
+      var ms = expires - Date.now();
+      if (!isFinite(ms) || ms <= 0) { el.textContent = 'ended'; return; }
+      var m = Math.floor(ms/60000), s = Math.floor((ms%60000)/1000);
+      el.textContent = m + ':' + String(s).padStart(2,'0');
+      setTimeout(tick, 1000);
+    })();
+  });
+})();
+</script>

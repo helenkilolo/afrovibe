@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="afro">
+  <%- include('partials/head.ejs', { pageTitle: 'Favorites' }) %>
+  <body class="bg-base-100 min-h-screen flex flex-col">
+
+    <%- include('partials/navbar.ejs') %>
+
+    <main class="container mx-auto p-4 flex-grow">
+      <header class="mb-6 flex items-center justify-between">
+        <div>
+          <h1 class="text-3xl font-bold">Favorites</h1>
+          <p class="opacity-70 text-sm">Star people you don’t want to lose. Wave to break the ice.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <% if (currentUser.isPremium) { %>
+            <span class="badge badge-success">Premium</span>
+          <% } else { %>
+            <a href="/upgrade" class="btn btn-primary btn-sm">Upgrade</a>
+          <% } %>
+        </div>
+      </header>
+
+      <div role="tablist" class="tabs tabs-bordered mb-4">
+        <a role="tab" class="tab tab-active" href="#my">My favorites</a>
+        <a role="tab" class="tab" href="#me">Favorited me</a>
+      </div>
+
+      <!-- My Favorites -->
+      <section id="my" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <% if (!myFavorites.length) { %>
+          <div class="col-span-full text-center opacity-60">No favorites yet. Tap ★ on profiles.</div>
+        <% } %>
+        <% myFavorites.forEach(u => { %>
+          <article class="card bg-base-100 shadow border border-base-200">
+            <figure class="aspect-[4/5] overflow-hidden">
+              <img src="<%= u.profile?.photos?.[0] || '/img/placeholder.jpg' %>" class="w-full h-full object-cover" alt="">
+            </figure>
+            <div class="card-body p-3">
+              <div class="flex items-center gap-2">
+                <h3 class="font-semibold truncate"><%= u.username %></h3>
+                <% if (u.verifiedAt) { %><span class="badge badge-info">Verified</span><% } %>
+              </div>
+              <div class="text-xs opacity-70">
+                <%= u.profile?.age ? u.profile.age + ' · ' : '' %><%= [u.profile?.city, u.profile?.country].filter(Boolean).join(', ') %>
+              </div>
+
+              <div class="card-actions mt-3 grid grid-cols-2 gap-2">
+                <!-- Favorite toggle -->
+                <button
+                  class="btn btn-ghost btn-sm favorite-toggle text-yellow-500"
+                  data-id="<%= u._id %>"
+                  title="Unfavorite">
+                  ★ <span class="ml-1">Favorited</span>
+                </button>
+
+                <!-- Wave -->
+                <button
+                  class="btn btn-outline btn-sm wave-btn"
+                  data-id="<%= u._id %>"
+                  <%= u.iWaved ? 'disabled' : '' %>>
+                  👋 <span class="ml-1"><%= u.iWaved ? 'Waved' : 'Wave' %></span>
+                </button>
+              </div>
+
+              <div class="mt-2 flex gap-2">
+                <a class="btn btn-ghost btn-2xs" href="/users/<%= u._id %>">View</a>
+                <a class="btn btn-primary btn-2xs" href="/chat/<%= u._id %>">Message</a>
+              </div>
+            </div>
+          </article>
+        <% }) %>
+      </section>
+
+      <!-- Favorited Me -->
+      <section id="me" class="mt-10">
+        <div class="mb-2 font-semibold">People who favorited you</div>
+
+        <% const locked = !currentUser.isPremium; %>
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 relative">
+          <% if (!favoritedMe.length) { %>
+            <div class="col-span-full text-center opacity-60">No one has favorited you yet.</div>
+          <% } %>
+
+          <% favoritedMe.forEach(u => { %>
+            <article class="card bg-base-100 shadow border border-base-200 relative">
+              <% if (locked) { %>
+                <div class="absolute inset-0 z-10 backdrop-blur-sm bg-base-100/40 flex items-center justify-center">
+                  <div class="text-center">
+                    <div class="text-sm opacity-70 mb-2">Upgrade to see who favorited you</div>
+                    <a href="/upgrade" class="btn btn-primary btn-sm">Upgrade</a>
+                  </div>
+                </div>
+              <% } %>
+              <figure class="aspect-[4/5] overflow-hidden">
+                <img src="<%= u.profile?.photos?.[0] || '/img/placeholder.jpg' %>" class="w-full h-full object-cover" alt="">
+              </figure>
+              <div class="card-body p-3">
+                <div class="flex items-center gap-2">
+                  <h3 class="font-semibold truncate"><%= u.username %></h3>
+                  <% if (u.verifiedAt) { %><span class="badge badge-info">Verified</span><% } %>
+                </div>
+                <div class="text-xs opacity-70">
+                  <%= u.profile?.age ? u.profile.age + ' · ' : '' %><%= [u.profile?.city, u.profile?.country].filter(Boolean).join(', ') %>
+                </div>
+
+                <div class="card-actions mt-3 grid grid-cols-2 gap-2">
+                  <!-- Favorite toggle -->
+                  <button
+                    class="btn btn-ghost btn-sm favorite-toggle <%= u.isFavorite ? 'text-yellow-500' : '' %>"
+                    data-id="<%= u._id %>"
+                    title="<%= u.isFavorite ? 'Unfavorite' : 'Favorite' %>">
+                    ★ <span class="ml-1"><%= u.isFavorite ? 'Favorited' : 'Favorite' %></span>
+                  </button>
+
+                  <!-- Wave -->
+                  <button
+                    class="btn btn-outline btn-sm wave-btn"
+                    data-id="<%= u._id %>"
+                    <%= u.iWaved ? 'disabled' : '' %>>
+                    👋 <span class="ml-1"><%= u.iWaved ? 'Waved' : 'Wave' %></span>
+                  </button>
+                </div>
+
+                <div class="mt-2 flex gap-2">
+                  <a class="btn btn-ghost btn-2xs" href="/users/<%= u._id %>">View</a>
+                  <a class="btn btn-primary btn-2xs" href="/chat/<%= u._id %>">Message</a>
+                </div>
+              </div>
+            </article>
+          <% }) %>
+        </div>
+      </section>
+    </main>
+
+    <%- include('partials/footer.ejs') %>
+
+    <script src="/socket.io/socket.io.js" defer></script>
+    <script src="/js/socket.io.js" defer></script>
+    <script src="/js/page-favorites.js" defer></script>
+  </body>
+</html>

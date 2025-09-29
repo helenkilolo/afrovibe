@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="afro">
+  <head>
+    <%- include('partials/head.ejs', { pageTitle: 'Advanced Search' }) %>
+  </head>
+  <body class="bg-base-100 min-h-screen">
+    <%- include('partials/navbar.ejs', { currentUser, unreadMessages, unreadNotificationCount }) %>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div class="flex items-center justify-between mb-4">
+        <h1 class="text-2xl font-bold">Advanced Search</h1>
+        <div class="flex items-center gap-2">
+          <a href="/advanced-search" class="link link-primary text-sm">Set to default</a>
+          <a href="/dashboard" class="btn btn-ghost btn-sm">← Back to Discover</a>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Filters -->
+        <aside class="lg:col-span-4">
+          <form method="get" action="/advanced-search" class="card bg-base-100 border shadow-sm">
+            <div class="card-body p-4 sm:p-6">
+              <h2 class="card-title text-base mb-2">Search for Your Matches</h2>
+
+              <!-- Row 1: Gender + Age -->
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <label class="form-control">
+                  <span class="label-text">I’m</span>
+                  <select name="seekingGender" class="select select-bordered">
+                    <option value="Any"   <%= filters.seekingGender==='Any' ? 'selected' : '' %>>Looking for…</option>
+                    <option value="Woman" <%= filters.seekingGender==='Woman' ? 'selected' : '' %>>Woman</option>
+                    <option value="Man"   <%= filters.seekingGender==='Man' ? 'selected' : '' %>>Man</option>
+                    <option value="Non-binary" <%= filters.seekingGender==='Non-binary' ? 'selected' : '' %>>Non-binary</option>
+                  </select>
+                </label>
+
+                <label class="form-control">
+                  <span class="label-text">Age (min)</span>
+                  <select name="minAge" class="select select-bordered">
+                    <option value=""></option>
+                    <% for (let a=18; a<=80; a++) { %>
+                      <option value="<%= a %>" <%= String(filters.minAge||'')===String(a) ? 'selected' : '' %>><%= a %></option>
+                    <% } %>
+                  </select>
+                </label>
+
+                <label class="form-control">
+                  <span class="label-text">Age (max)</span>
+                  <select name="maxAge" class="select select-bordered">
+                    <option value=""></option>
+                    <% for (let a=18; a<=80; a++) { %>
+                      <option value="<%= a %>" <%= String(filters.maxAge||'')===String(a) ? 'selected' : '' %>><%= a %></option>
+                    <% } %>
+                  </select>
+                </label>
+              </div>
+
+              <!-- Row 2: Location -->
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
+                <label class="form-control">
+                  <span class="label-text">Country</span>
+                  <input name="country" class="input input-bordered" placeholder="Any"
+                         value="<%= filters.country || '' %>">
+                </label>
+                <label class="form-control">
+                  <span class="label-text">State / Province</span>
+                  <input name="stateProvince" class="input input-bordered"
+                         value="<%= filters.stateProvince || '' %>">
+                </label>
+                <label class="form-control">
+                  <span class="label-text">City</span>
+                  <input name="city" class="input input-bordered"
+                         value="<%= filters.city || '' %>">
+                </label>
+              </div>
+
+              <!-- Row 3: Distance + Sort (with premium locks) -->
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
+                <label class="form-control">
+                  <span class="label-text flex items-center gap-2">
+                    Radius (km)
+                    <% if (premiumLocks && premiumLocks.radius && !currentUser.isPremium) { %>
+                      <span class="badge badge-warning badge-outline">🔒</span>
+                    <% } %>
+                  </span>
+                  <input name="radiusKm" type="number" min="0" class="input input-bordered"
+                         value="<%= filters.radiusKm || '' %>">
+                </label>
+
+                <label class="form-control sm:col-span-2">
+                  <span class="label-text flex items-center gap-2">
+                    Sort by
+                    <% if (premiumLocks && premiumLocks.distanceSort && !currentUser.isPremium) { %>
+                      <span class="badge badge-warning badge-outline">🔒 distance</span>
+                    <% } %>
+                  </span>
+                  <select name="sort" class="select select-bordered">
+                    <option value="active"   <%= filters.sort==='active' ? 'selected' : '' %>>Recently active</option>
+                    <option value="recent"   <%= filters.sort==='recent' ? 'selected' : '' %>>Newest members</option>
+                    <option value="ageAsc"   <%= filters.sort==='ageAsc' ? 'selected' : '' %>>Age ↑</option>
+                    <option value="ageDesc"  <%= filters.sort==='ageDesc' ? 'selected' : '' %>>Age ↓</option>
+                    <option value="distance" <%= filters.sort==='distance' ? 'selected' : '' %>>Distance (Premium)</option>
+                  </select>
+                </label>
+              </div>
+
+              <!-- Quick toggles -->
+              <div class="mt-4 space-y-2">
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" class="checkbox checkbox-sm"
+                         name="verifiedOnly" value="1" <%= filters.verifiedOnly==='1' ? 'checked' : '' %> />
+                  <span>Verified only</span>
+                </label>
+
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" class="checkbox checkbox-sm"
+                         name="onlineNow" value="1" <%= filters.onlineNow==='1' ? 'checked' : '' %> />
+                  <span>Online now</span>
+                </label>
+
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" class="checkbox checkbox-sm"
+                         name="hasPhoto" value="1" <%= filters.hasPhoto==='1' ? 'checked' : '' %> />
+                  <span>Has photo</span>
+                </label>
+              </div>
+
+              <!-- Photo count (premium lock possible) -->
+              <div class="mt-3">
+                <label class="form-control">
+                  <span class="label-text flex items-center gap-2">
+                    Minimum photos
+                    <% if (premiumLocks && premiumLocks.minPhotos && !currentUser.isPremium) { %>
+                      <span class="badge badge-warning badge-outline">🔒</span>
+                    <% } %>
+                  </span>
+                  <input name="minPhotos" type="number" min="0" class="input input-bordered"
+                         value="<%= filters.minPhotos || '' %>">
+                </label>
+              </div>
+
+              <!-- Search text + interests -->
+              <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label class="form-control">
+                  <span class="label-text">Keyword</span>
+                  <input name="q" class="input input-bordered" placeholder="bio, username…"
+                         value="<%= filters.q || '' %>">
+                </label>
+                <label class="form-control">
+                  <span class="label-text">Interests</span>
+                  <input name="interests" class="input input-bordered" placeholder="music, sports…"
+                         value="<%= filters.interests || '' %>">
+                </label>
+              </div>
+
+              <!-- Cultural -->
+              <div class="mt-6">
+                <h3 class="font-semibold mb-2">Cultural</h3>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <label class="form-control">
+                    <span class="label-text">Religion</span>
+                    <input name="religion" class="input input-bordered" value="<%= filters.religion || '' %>">
+                  </label>
+                  <label class="form-control">
+                    <span class="label-text">Denomination</span>
+                    <input name="denomination" class="input input-bordered" value="<%= filters.denomination || '' %>">
+                  </label>
+                  <label class="form-control sm:col-span-3">
+                    <span class="label-text flex items-center gap-2">
+                      Languages (CSV)
+                      <% if (premiumLocks && premiumLocks.languages && !currentUser.isPremium) { %>
+                        <span class="badge badge-warning badge-outline">🔒</span>
+                      <% } %>
+                    </span>
+                    <input name="languages" class="input input-bordered"
+                           placeholder="English, Swahili" value="<%= filters.languages || '' %>">
+                  </label>
+                </div>
+              </div>
+
+              <!-- Lifestyle -->
+              <div class="mt-6">
+                <h3 class="font-semibold mb-2">Lifestyle</h3>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <label class="form-control">
+                    <span class="label-text">Education</span>
+                    <input name="education" class="input input-bordered"
+                           value="<%= filters.education || '' %>">
+                  </label>
+                  <label class="form-control">
+                    <span class="label-text">Smoking</span>
+                    <input name="smoking" class="input input-bordered"
+                           value="<%= filters.smoking || '' %>">
+                  </label>
+                  <label class="form-control">
+                    <span class="label-text">Drinking</span>
+                    <input name="drinking" class="input input-bordered"
+                           value="<%= filters.drinking || '' %>">
+                  </label>
+                </div>
+                <% if (premiumLocks && premiumLocks.lifestyle && !currentUser.isPremium) { %>
+                  <div class="mt-2 text-xs opacity-70">Some lifestyle filters are Premium. We’ll adjust if needed.</div>
+                <% } %>
+              </div>
+
+              <!-- Activity & Freshness -->
+              <div class="mt-6">
+                <h3 class="font-semibold mb-2">Activity & Freshness</h3>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <label class="form-control">
+                    <span class="label-text">Joined within (days)</span>
+                    <input name="joinedWithinDays" type="number" min="0" class="input input-bordered"
+                           value="<%= filters.joinedWithinDays || '' %>">
+                  </label>
+                  <label class="form-control">
+                    <span class="label-text">Active within (min)</span>
+                    <input name="activeWithinMin" type="number" min="0" class="input input-bordered"
+                           value="<%= filters.activeWithinMin || '' %>">
+                  </label>
+                  <label class="form-control">
+                    <span class="label-text">Bio length ≥</span>
+                    <input name="bioMinLen" type="number" min="0" class="input input-bordered"
+                           value="<%= filters.bioMinLen || '' %>">
+                  </label>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
+                  <label class="form-control">
+                    <span class="label-text">Prompts answered ≥</span>
+                    <input name="promptsMin" type="number" min="0" class="input input-bordered"
+                           value="<%= filters.promptsMin || '' %>">
+                  </label>
+                  <label class="form-control sm:col-span-2">
+                    <span class="label-text flex items-center gap-2">
+                     Available for Video Chat
+                      <% if (premiumLocks?.videoChat) { %><span class="badge badge-outline">🔒 Elite</span><% } %>
+                      </span>
+                      <select name="videoChat" class="select select-bordered" <%= premiumLocks?.videoChat ? 'disabled' : '' %>>
+                      <option value="">Any</option>
+                      <option value="1" <%= filters.videoChat==='1' ? 'selected' : '' %>>Yes</option>
+                      <option value="0" <%= filters.videoChat==='0' ? 'selected' : '' %>>No</option>
+                      </select>
+                    </label>
+                </div>
+              </div>
+
+              <!-- Social graph shortcuts -->
+              <div class="mt-6">
+                <h3 class="font-semibold mb-2">Connections</h3>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" class="checkbox checkbox-sm"
+                           name="likedMe" value="1" <%= filters.likedMe==='1' ? 'checked' : '' %> />
+                    <span>People who liked me</span>
+                  </label>
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" class="checkbox checkbox-sm"
+                           name="iFavorited" value="1" <%= filters.iFavorited==='1' ? 'checked' : '' %> />
+                    <span>I favorited</span>
+                  </label>
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" class="checkbox checkbox-sm"
+                           name="mutualOnly" value="1" <%= filters.mutualOnly==='1' ? 'checked' : '' %> />
+                    <span>Mutual likes only</span>
+                  </label>
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" class="checkbox checkbox-sm"
+                           name="unseenOnly" value="1" <%= filters.unseenOnly==='1' ? 'checked' : '' %> />
+                    <span>Unseen by me</span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Zodiac (optional; server can add support later) -->
+              <div class="mt-6">
+                <h3 class="font-semibold mb-2 flex items-center justify-between">
+                  <span>Zodiac Signs</span>
+                  <a href="#" class="link text-sm" data-action="zodiac-select-all">Select all</a>
+                </h3>
+                <div class="grid grid-cols-2 gap-x-4 gap-y-2">
+                  <% const z = ['Aries','Taurus','Gemini','Cancer','Leo','Virgo','Libra','Scorpio','Sagittarius','Capricorn','Aquarius','Pisces']; %>
+                  <% for (const sign of z) { %>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" class="checkbox checkbox-sm"
+                             name="zodiac[]" value="<%= sign %>"
+                             <%= Array.isArray(filters.zodiac) && filters.zodiac.includes(sign) ? 'checked' : '' %> />
+                      <span><%= sign %></span>
+                    </label>
+                  <% } %>
+                </div>
+
+                <label class="flex items-center gap-2 cursor-pointer mt-3">
+                  <input type="checkbox" class="checkbox checkbox-sm"
+                         name="compatibleZodiac" value="1" <%= filters.compatibleZodiac==='1' ? 'checked' : '' %> />
+                  <span>Show only the Zodiac signs that are compatible with me</span>
+                </label>
+              </div>
+
+              <!-- Submit -->
+              <div class="mt-6 flex items-center gap-2">
+                <button class="btn btn-primary">SHOW MATCHES</button>
+                <a href="/advanced-search" class="btn btn-ghost">Clear</a>
+              </div>
+            </div>
+          </form>
+        </aside>
+
+        <!-- Results -->
+        <section class="lg:col-span-8">
+          <div class="flex items-center justify-between mb-3">
+            <div class="text-sm opacity-70">
+              <%= pageMeta.total %> result<%= pageMeta.total===1 ? '' : 's' %>
+            </div>
+            <div class="text-sm opacity-70">Page <%= pageMeta.page %> / <%= pageMeta.totalPages %></div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+            <% (people || []).forEach(u => { %>
+              <div class="card bg-base-100 border">
+                <figure class="aspect-[4/3] bg-base-200 overflow-hidden">
+                  <% const photo = (u.profile?.photos && u.profile.photos[0]) ? u.profile.photos[0] : '/img/avatar.png'; %>
+                  <img src="<%= photo %>" alt="<%= u.username %>" class="w-full h-full object-cover">
+                </figure>
+                <div class="card-body p-4">
+                  <div class="flex items-center gap-2">
+                    <h3 class="font-semibold truncate"><%= u.username %></h3>
+                    <% if (u.verifiedAt) { %>
+                      <span class="badge badge-success badge-outline">Verified</span>
+                    <% } %>
+                    <% if (u.isOnline) { %>
+                      <span class="badge badge-info badge-outline">Online</span>
+                    <% } %>
+                    <% if (u.boostActive) { %>
+                      <span class="badge badge-warning badge-outline">Boost</span>
+                    <% } %>
+                  </div>
+                  <div class="text-sm opacity-80">
+                    <%= u.profile?.age ? u.profile.age + ' · ' : '' %>
+                    <%= [u.profile?.city, u.profile?.country].filter(Boolean).join(', ') %>
+                  </div>
+                  <% if (typeof u.distanceKm === 'number') { %>
+                    <div class="text-xs opacity-70">~ <%= Math.round(u.distanceKm) %> km away</div>
+                  <% } %>
+                  <div class="card-actions mt-3">
+                    <a href="/users/<%= u._id %>" class="btn btn-ghost btn-sm">View</a>
+                  </div>
+                </div>
+              </div>
+            <% }) %>
+          </div>
+
+          <!-- Simple pager (prev/next links preserve current query via form submit is ideal; here minimal) -->
+          <div class="mt-6 flex items-center justify-between">
+            <% const prevPage = Math.max(pageMeta.page - 1, 1); %>
+            <% const nextPage = Math.min(pageMeta.page + 1, pageMeta.totalPages); %>
+            <a class="btn btn-ghost btn-sm <%= pageMeta.page<=1 ? 'btn-disabled' : '' %>"
+               href="/advanced-search?<%= Object.entries(filters).map(([k,v])=>`${encodeURIComponent(k)}=${encodeURIComponent(v??'')}`).join('&') %>&page=<%= prevPage %>&limit=<%= pageMeta.limit %>">← Prev</a>
+            <a class="btn btn-ghost btn-sm <%= pageMeta.page>=pageMeta.totalPages ? 'btn-disabled' : '' %>"
+               href="/advanced-search?<%= Object.entries(filters).map(([k,v])=>`${encodeURIComponent(k)}=${encodeURIComponent(v??'')}`).join('&') %>&page=<%= nextPage %>&limit=<%= pageMeta.limit %>">Next →</a>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <%- include('partials/footer.ejs') %>
+    <!-- optional page JS for 'Select all' zodiac etc. -->
+    <script src="/js/page-advanced-search.js" defer></script>
+  </body>
+</html>

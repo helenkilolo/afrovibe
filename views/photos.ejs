@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="cupcake">
+<%- include('partials/head.ejs', { pageTitle: 'Manage Photos' }) %>
+<body data-theme="cupcake" class="bg-base-100 min-h-screen flex flex-col">
+  <%- include('partials/navbar.ejs') %>
+
+  <div class="container mx-auto p-4 flex-grow">
+    <h1 class="text-4xl font-extrabold text-center text-primary mt-8 mb-4">Manage Photos</h1>
+    <p class="text-center text-gray-600 mb-8">Upload and manage up to 5 photos for your profile.</p>
+
+    <div class="max-w-2xl mx-auto bg-base-200 p-8 rounded-2xl shadow-xl space-y-8">
+      <!-- Photo Upload Form -->
+      <form id="uploadForm" action="/photos/upload" method="POST" enctype="multipart/form-data" class="space-y-4">
+        <div class="form-control w-full">
+          <label for="profilePhotos" class="label">
+            <span class="label-text">Upload Photos (max 5)</span>
+          </label>
+          <!-- The name="profilePhotos" attribute must match the Multer configuration -->
+          <input type="file" name="profilePhotos" id="profilePhotos" class="file-input file-input-bordered w-full" multiple required>
+        </div>
+        <button type="submit" class="btn btn-primary w-full">Upload</button>
+      </form>
+
+      <!-- Photo Gallery -->
+      <div>
+        <h2 class="text-2xl font-semibold mb-4">Your Photos</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <% if (userPhotos && userPhotos.length > 0) { %>
+            <% userPhotos.forEach(photo => { %>
+              <div class="card bg-base-100 shadow-md">
+                <figure><img src="<%= photo %>" alt="User photo" class="w-full h-48 object-cover"></figure>
+                <div class="card-body p-4">
+                  <form action="/photos/delete" method="POST" class="deleteForm" data-photo-url="<%= photo %>">
+                    <input type="hidden" name="photoUrl" value="<%= photo %>">
+                    <button type="submit" class="btn btn-sm btn-error w-full">Delete</button>
+                  </form>
+                </div>
+              </div>
+            <% }); %>
+          <% } else { %>
+            <p class="text-gray-500 col-span-full text-center">You have no photos uploaded yet.</p>
+          <% } %>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <%- include('partials/modals.ejs') %>
+  <%- include('partials/footer.ejs') %>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/socket.io.js"></script>
+  <script>
+    // Utility function to show alert modal
+    function alertModal(title, message) {
+      const modal = document.getElementById('alertModal');
+      const alertTitle = document.getElementById('alertTitle');
+      const alertMessage = document.getElementById('alertMessage');
+      if (modal && alertTitle && alertMessage) {
+        alertTitle.innerText = title;
+        alertMessage.innerText = message;
+        modal.classList.add('modal-open');
+      }
+    }
+
+    // Handle photo upload
+    document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const form = e.target;
+        const formData = new FormData(form);
+
+        try {
+            const response = await fetch(form.action, {
+                method: 'POST',
+                body: formData,
+            });
+            const result = await response.json();
+            if (result.status === 'success') {
+                alertModal('Success', result.message);
+                setTimeout(() => location.reload(), 1000); // Refresh to show new photos
+            } else {
+                alertModal('Error', result.message);
+            }
+        } catch (err) {
+            console.error('Error uploading photos:', err);
+            alertModal('Error', 'Failed to upload photos.');
+        }
+    });
+
+    // Handle photo deletion
+    document.querySelectorAll('.deleteForm').forEach(form => {
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(form);
+            const photoUrl = formData.get('photoUrl');
+            
+            try {
+                const response = await fetch('/photos/delete', {
+                    method: 'POST',
+                    body: new URLSearchParams(formData).toString(),
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                });
+                const result = await response.json();
+                if (result.status === 'success') {
+                    alertModal('Success', result.message);
+                    setTimeout(() => location.reload(), 1000); // Refresh to update photos
+                } else {
+                    alertModal('Error', result.message);
+                }
+            } catch (err) {
+                console.error('Error deleting photo:', err);
+                alertModal('Error', 'Failed to delete photo.');
+            }
+        });
+    });
+  </script>
+</body>
+</html>

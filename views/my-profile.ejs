@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="cupcake">
+  <%- include('partials/head.ejs', { pageTitle: 'My Profile' }) %>
+  <body class="bg-base-100 min-h-screen flex flex-col">
+    <%- include('partials/navbar.ejs') %>
+
+    <main class="container mx-auto p-4 md:p-8 flex-grow">
+      <!-- Masthead -->
+      <section class="bg-base-200 rounded-2xl shadow-xl p-6 md:p-8">
+        <div class="flex flex-col md:flex-row gap-6 md:gap-8 items-center md:items-start">
+          <!-- Avatar -->
+          <div class="relative">
+            <div class="avatar">
+              <div class="w-40 h-40 md:w-52 md:h-52 rounded-full ring ring-primary ring-offset-base-100 ring-offset-2 shadow">
+                <img
+                  src="<%= currentUser?.profile?.photos?.[0] || '/images/default-avatar.png' %>"
+                  alt="<%= currentUser.username %> avatar" />
+              </div>
+            </div>
+            <% if (currentUser?.isVerified) { %>
+              <div class="badge badge-success absolute -bottom-2 left-1/2 -translate-x-1/2">Verified</div>
+            <% } %>
+          </div>
+
+          <!-- Name + meta + actions -->
+          <div class="flex-1 min-w-0 text-center md:text-left">
+            <div class="flex flex-col md:flex-row md:items-center gap-2 md:gap-3">
+              <h1 class="text-3xl md:text-4xl font-bold truncate"><%= currentUser.username %></h1>
+              <% if (currentUser?.profile?.age) { %>
+                <span class="badge badge-lg"><%= currentUser.profile.age %></span>
+              <% } %>
+              <% if (currentUser?.isPremium) { %>
+                <span class="badge badge-secondary badge-lg">Premium</span>
+              <% } %>
+              <!-- Boost status -->
+              <span id="boostBadge"
+                    class="badge badge-primary badge-lg hidden"
+                    data-expires="<%= currentUser?.boostExpiresAt ? new Date(currentUser.boostExpiresAt).toISOString() : '' %>">
+                Boost active • <span id="boostCountdown">00:00</span>
+              </span>
+            </div>
+
+            <div class="mt-2 text-gray-500 flex flex-wrap items-center gap-2 justify-center md:justify-start">
+              <% if (currentUser?.profile?.location) { %>
+                <span class="badge badge-outline"><%= currentUser.profile.location %></span>
+              <% } %>
+              <% if (currentUser?.profile?.occupation) { %>
+                <span class="badge badge-outline"><%= currentUser.profile.occupation %></span>
+              <% } %>
+              <% if (Array.isArray(currentUser?.profile?.interests) && currentUser.profile.interests.length) { %>
+                <span class="badge badge-outline">Interests: <%= currentUser.profile.interests.join(', ') %></span>
+              <% } %>
+            </div>
+
+            <div class="mt-4 flex flex-wrap gap-2 justify-center md:justify-start">
+              <a href="/settings" class="btn btn-ghost btn-sm">Settings</a>
+              <button id="setLocationBtn" class="btn btn-outline btn-sm">Use my location</button>
+              <button id="boostBtn" class="btn btn-primary btn-sm">Boost profile</button>
+              <button id="copyLinkBtn" class="btn btn-ghost btn-sm">Copy profile link</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick stats + completion -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
+          <div class="stats shadow w-full md:col-span-3">
+            <div class="stat">
+              <div class="stat-title">Likes Sent</div>
+              <div class="stat-value"><%= (currentUser?.likes?.length || 0) %></div>
+            </div>
+            <div class="stat">
+              <div class="stat-title">Liked By</div>
+              <div class="stat-value"><%= (currentUser?.likedBy?.length || 0) %></div>
+            </div>
+            <div class="stat">
+              <div class="stat-title">Matches</div>
+              <div class="stat-value"><%= (currentUser?.matches?.length || 0) %></div>
+            </div>
+          </div>
+          <div class="card bg-base-100 shadow">
+            <div class="card-body">
+              <div class="flex items-center justify-between">
+                <h3 class="card-title text-sm">Profile completion</h3>
+                <span id="completionPct" class="text-sm font-semibold">0%</span>
+              </div>
+              <progress id="completionBar" class="progress progress-primary w-full" value="0" max="100"></progress>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tabs -->
+      <section class="mt-8 bg-base-200 rounded-2xl shadow-xl p-4 md:p-6">
+        <div role="tablist" class="tabs tabs-bordered">
+          <button role="tab" class="tab tab-active" data-tab="overview">Overview</button>
+          <button role="tab" class="tab" data-tab="edit">Edit Profile</button>
+        </div>
+
+        <!-- OVERVIEW -->
+        <div id="tab-overview" class="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <!-- About + details -->
+          <div class="lg:col-span-2 space-y-6">
+            <div class="card bg-base-100 shadow">
+              <div class="card-body">
+                <h2 class="card-title">About me</h2>
+                <p class="mt-2 leading-relaxed">
+                  <%= (currentUser?.profile?.bio && currentUser.profile.bio.trim()) || 'No bio provided yet.' %>
+                </p>
+              </div>
+            </div>
+
+            <div class="card bg-base-100 shadow">
+              <div class="card-body">
+                <h2 class="card-title">My details</h2>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
+                  <% const details = [
+                    { label: 'Gender', value: currentUser?.profile?.gender },
+                    { label: 'Height', value: currentUser?.profile?.height },
+                    { label: 'Body Type', value: currentUser?.profile?.bodyType },
+                    { label: 'Hair Color', value: currentUser?.profile?.hairColor },
+                    { label: 'Eye Color', value: currentUser?.profile?.eyeColor },
+                    { label: 'Education', value: currentUser?.profile?.education },
+                    { label: 'Drinking', value: currentUser?.profile?.drinking },
+                    { label: 'Smoking', value: currentUser?.profile?.smoking },
+                    { label: 'Zodiac Sign', value: currentUser?.profile?.zodiacSign },
+                    { label: 'Pets', value: currentUser?.profile?.pets },
+                    { label: 'Religion', value: currentUser?.profile?.religion },
+                    { label: 'Politics', value: currentUser?.profile?.politics },
+                    { label: 'Kids', value: currentUser?.profile?.kids },
+                    { label: 'Looking For', value: currentUser?.profile?.lookingFor },
+                    { label: 'Relationship Goals', value: currentUser?.profile?.relationshipGoals },
+                    { label: 'Fav African Artists', value: currentUser?.profile?.favoriteAfricanArtists },
+                    { label: 'Cultural Traditions', value: currentUser?.profile?.culturalTraditions },
+                  ]; details.forEach(d => { %>
+                    <div class="flex items-center gap-2">
+                      <span class="text-sm text-gray-500 w-40"><%= d.label %>:</span>
+                      <span class="font-medium"><%= d.value || 'Not specified' %></span>
+                    </div>
+                  <% }); %>
+                </div>
+              </div>
+            </div>
+
+            <!-- Prompts / answers (read-only showcase if available) -->
+            <% if (Array.isArray(currentUser?.profile?.prompts) && currentUser.profile.prompts.length) { %>
+              <div class="card bg-base-100 shadow">
+                <div class="card-body">
+                  <h2 class="card-title">Conversation prompts</h2>
+                  <div class="mt-2 space-y-3">
+                    <% currentUser.profile.prompts.forEach((p) => { %>
+                      <div class="border border-base-300 rounded-xl p-3">
+                        <div class="text-sm text-gray-500"><%= p.q || 'Prompt' %></div>
+                        <div class="font-medium"><%= p.a || '' %></div>
+                      </div>
+                    <% }); %>
+                  </div>
+                </div>
+              </div>
+            <% } %>
+          </div>
+
+          <!-- Photos -->
+          <div class="space-y-6">
+            <div class="card bg-base-100 shadow">
+              <div class="card-body">
+                <h2 class="card-title">Photos</h2>
+                <% if (Array.isArray(currentUser?.profile?.photos) && currentUser.profile.photos.length) { %>
+                  <div class="grid grid-cols-2 gap-3 mt-2">
+                    <% currentUser.profile.photos.forEach((p) => { %>
+                      <img src="<%= p %>" alt="Photo" class="w-full h-28 object-cover rounded-xl shadow">
+                    <% }); %>
+                  </div>
+                <% } else { %>
+                  <p class="text-sm text-gray-500 italic mt-2">No photos uploaded yet.</p>
+                <% } %>
+              </div>
+            </div>
+
+            <!-- Streak / activity -->
+            <div class="card bg-base-100 shadow">
+              <div class="card-body">
+                <h2 class="card-title">Activity</h2>
+                <div class="flex items-center gap-3">
+                  <div class="radial-progress text-primary" id="streakRadial" style="--value:<%= Math.max(0, Math.min(100, ((Number(currentUser?.streakDay||0)/7)*100))) %>;" role="progressbar">
+                    <%= Number(currentUser?.streakDay||0) %>/7
+                  </div>
+                  <div>
+                    <div class="font-medium">Weekly streak</div>
+                    <div class="text-sm text-gray-500">Keep logging in daily to hit your 7-day streak.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- EDIT -->
+        <div id="tab-edit" class="hidden mt-6">
+          <form action="/my-profile" method="POST" enctype="multipart/form-data" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Left: basic info -->
+            <div class="lg:col-span-2 space-y-6">
+              <div class="card bg-base-100 shadow">
+                <div class="card-body">
+                  <h2 class="card-title">Basic info</h2>
+
+                  <div class="form-control">
+                    <label class="label"><span class="label-text">Bio</span></label>
+                    <textarea name="bio" class="textarea textarea-bordered" rows="4" placeholder="Tell us about yourself..."><%= currentUser?.profile?.bio || '' %></textarea>
+                  </div>
+
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-control">
+                      <label class="label"><span class="label-text">Age</span></label>
+                      <input type="number" name="age" class="input input-bordered" value="<%= currentUser?.profile?.age || '' %>" min="18" max="99" required>
+                    </div>
+                    <div class="form-control">
+                      <label class="label"><span class="label-text">Gender</span></label>
+                      <select name="gender" class="select select-bordered" required>
+                        <% const g = currentUser?.profile?.gender; %>
+                        <option value="Male" <%= g==='Male' ? 'selected' : '' %>>Male</option>
+                        <option value="Female" <%= g==='Female' ? 'selected' : '' %>>Female</option>
+                        <option value="Non-binary" <%= g==='Non-binary' ? 'selected' : '' %>>Non-binary</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-control">
+                      <label class="label"><span class="label-text">Occupation</span></label>
+                      <input type="text" name="occupation" class="input input-bordered" value="<%= currentUser?.profile?.occupation || '' %>">
+                    </div>
+                    <div class="form-control">
+                      <label class="label"><span class="label-text">Interests (comma separated)</span></label>
+                      <input type="text" name="interests" class="input input-bordered" value="<%= Array.isArray(currentUser?.profile?.interests) ? currentUser.profile.interests.join(', ') : '' %>">
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="card bg-base-100 shadow">
+                <div class="card-body">
+                  <h2 class="card-title">Cultural & personal</h2>
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-control">
+                      <label class="label"><span class="label-text">Favorite African Artists</span></label>
+                      <input type="text" name="favoriteAfricanArtists" class="input input-bordered"
+                             value="<%= currentUser?.profile?.favoriteAfricanArtists || '' %>" placeholder="e.g., Burna Boy, Sauti Sol, Tems">
+                    </div>
+                    <div class="form-control">
+                      <label class="label"><span class="label-text">Cultural Traditions</span></label>
+                      <input type="text" name="culturalTraditions" class="input input-bordered"
+                             value="<%= currentUser?.profile?.culturalTraditions || '' %>" placeholder="e.g., Ancestor's Day">
+                    </div>
+                    <div class="form-control md:col-span-2">
+                      <label class="label"><span class="label-text">Relationship Goals</span></label>
+                      <input type="text" name="relationshipGoals" class="input input-bordered"
+                             value="<%= currentUser?.profile?.relationshipGoals || '' %>" placeholder="e.g., Long-term partner">
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right: photos & location -->
+            <div class="space-y-6">
+              <div class="card bg-base-100 shadow">
+                <div class="card-body">
+                  <h2 class="card-title">Profile photos</h2>
+                  <p class="text-xs text-gray-500">Click a tile to select an image. JPG/PNG/WebP.</p>
+                  <div class="grid grid-cols-2 gap-3 mt-2">
+                    <% for (let i=0; i<4; i++) { const src = currentUser?.profile?.photos?.[i] || '/images/placeholder.png'; %>
+                      <label class="block relative cursor-pointer group">
+                        <img src="<%= src %>" alt="Photo <%= i+1 %>" class="w-full h-28 object-cover rounded-xl border border-base-300 preview-img">
+                        <input type="file" name="photos" accept="image/*" class="absolute inset-0 opacity-0 file-input file-input-bordered">
+                        <span class="absolute bottom-2 right-2 badge badge-primary opacity-0 group-hover:opacity-100 transition">Change</span>
+                      </label>
+                    <% } %>
+                  </div>
+                </div>
+              </div>
+
+              <div class="card bg-base-100 shadow">
+                <div class="card-body">
+                  <h2 class="card-title">Location</h2>
+                  <p class="text-sm text-gray-500">Use your browser to verify and save your coordinates for distance on cards.</p>
+                  <div class="mt-2">
+                    <button id="setLocationBtnBottom" class="btn btn-outline w-full">Use my location</button>
+                  </div>
+                </div>
+              </div>
+
+              <button type="submit" class="btn btn-primary w-full">Save changes</button>
+            </div>
+          </form>
+        </div>
+      </section>
+    </main>
+
+    <!-- Toasts -->
+    <div id="toasts" class="fixed bottom-4 right-4 space-y-2 z-50"></div>
+
+    <%- include('partials/footer.ejs') %>
+
+    <!-- External scripts (CSP-safe) -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/profile.js" defer></script>
+  </body>
+</html>

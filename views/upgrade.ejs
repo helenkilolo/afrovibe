@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="cupcake">
+<%- include('partials/head.ejs', { pageTitle: 'Upgrade' }) %>
+<body data-theme="cupcake" class="bg-base-100 min-h-screen flex flex-col">
+  <%- include('partials/navbar.ejs') %>
+
+  <div class="container mx-auto p-4 flex-grow">
+    <!-- Page Header -->
+    <div class="max-w-5xl mx-auto mb-6">
+      <h1 class="text-4xl font-extrabold text-primary">Upgrade Your Plan</h1>
+      <p class="text-gray-500 mt-2">Unlock more visibility, better matches, and premium features.</p>
+    </div>
+
+    <!-- Flash Messages -->
+    <% if (typeof success !== 'undefined' && success) { %>
+      <div class="alert alert-success shadow-lg max-w-5xl mx-auto my-4">
+        <div>
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+          </svg>
+          <span><%= success %></span>
+        </div>
+      </div>
+    <% } %>
+    <% if (typeof error !== 'undefined' && error) { %>
+      <div class="alert alert-error shadow-lg max-w-5xl mx-auto my-4">
+        <div>
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+          <span><%= error %></span>
+        </div>
+      </div>
+    <% } %>
+
+    <!-- Current Plan -->
+    <div class="max-w-5xl mx-auto mb-6">
+      <div class="card bg-base-200 shadow-xl">
+        <div class="card-body">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="card-title">Your Plan</h2>
+              <% if (currentUser && currentUser.isPremium) { %>
+                <p class="text-green-600 font-semibold">
+                  Premium ✅
+                  <% if (currentUser.subscriptionStatus) { %>
+                    <span class="ml-2 badge badge-success"><%= currentUser.subscriptionStatus %></span>
+                  <% } %>
+                </p>
+                <% if (currentUser.subscriptionEndsAt) { %>
+                  <p class="text-xs text-gray-500">
+                    Renews/ends: <%= new Date(currentUser.subscriptionEndsAt).toDateString() %>
+                  </p>
+                <% } %>
+              <% } else { %>
+                <p class="text-gray-700">Free Tier</p>
+              <% } %>
+            </div>
+            <div class="flex items-center gap-3">
+              <% if (currentUser && currentUser.isPremium && currentUser.stripeCustomerId) { %>
+                <form action="/billing-portal" method="POST">
+                  <button class="btn btn-outline">Manage Subscription</button>
+                </form>
+                <button id="cancelSubBtn" class="btn btn-warning">Cancel at period end</button>
+              <% } else { %>
+                <a href="#plans" class="btn btn-primary">View Plans</a>
+              <% } %>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Test Mode Notice -->
+    <div class="max-w-5xl mx-auto mb-6">
+      <div class="alert alert-info shadow-lg">
+        <div>
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20 10 10 0 000-20z"/>
+          </svg>
+          <div>
+            <p class="font-semibold">Stripe Test Mode</p>
+            <p>Use test card <code>4242 4242 4242 4242</code> with any future expiry and any CVC.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pricing Grid -->
+    <div id="plans" class="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+      <!-- Free -->
+      <div class="card bg-base-200 shadow-xl">
+        <div class="card-body">
+          <h3 class="text-2xl font-bold">Free</h3>
+          <p class="text-sm text-gray-500">Good for trying things out</p>
+          <div class="my-4">
+            <div class="text-4xl font-extrabold">$0<span class="text-base font-normal text-gray-500"> / forever</span></div>
+          </div>
+          <ul class="space-y-2 text-sm">
+            <li>• Limited daily likes</li>
+            <li>• Basic search filters</li>
+            <li>• Message matches</li>
+          </ul>
+          <div class="card-actions mt-6">
+            <% if (currentUser && !currentUser.isPremium) { %>
+              <button class="btn btn-disabled w-full">Current Plan</button>
+            <% } else { %>
+              <a href="/dashboard" class="btn btn-outline w-full">Continue Free</a>
+            <% } %>
+          </div>
+        </div>
+      </div>
+
+      <!-- Premium -->
+      <div class="card bg-primary text-primary-content shadow-xl border-2 border-primary">
+        <div class="card-body">
+          <div class="flex items-center justify-between">
+            <h3 class="text-2xl font-bold">Premium</h3>
+            <span class="badge badge-accent">Popular</span>
+          </div>
+          <p class="text-sm opacity-80">Best value for most people</p>
+          <div class="my-4">
+            <div class="text-4xl font-extrabold">$19.99<span class="text-base font-normal opacity-80"> / month</span></div>
+          </div>
+          <ul class="space-y-2 text-sm">
+            <li>• Unlimited likes</li>
+            <li>• See who liked you</li>
+            <li>• Advanced filters</li>
+            <li>• 1 profile Boost / week</li>
+            <li>• Priority visibility</li>
+          </ul>
+          <div class="card-actions mt-6">
+          <% if (plan === 'premium' || plan === 'elite') { %>
+            <form action="/billing-portal" method="POST" class="w-full">
+              <button class="btn btn-outline w-full" type="submit">Manage subscription</button>
+              </form>
+              <% } else { %>
+              <!-- Navigate to Stripe (GET) -->
+              <a href="/checkout/premium" class="btn btn-primary w-full">Go Premium</a>
+              <% } %>
+          </div>
+        </div>
+      </div>
+
+      <!-- Elite -->
+      <div class="card bg-base-200 shadow-xl">
+        <div class="card-body">
+          <h3 class="text-2xl font-bold">Elite</h3>
+          <p class="text-sm text-gray-500">For power users</p>
+          <div class="my-4">
+            <div class="text-4xl font-extrabold">$39.99<span class="text-base font-normal text-gray-500"> / month</span></div>
+          </div>
+          <ul class="space-y-2 text-sm">
+            <li>• Everything in Premium</li>
+            <li>• Super Likes bundle</li>
+            <li>• VIP badge & support</li>
+            <li>• Top Picks daily</li>
+            <li>• Event invites</li>
+          </ul>
+          <div class="card-actions mt-6">
+            <% if (plan === 'elite') { %>
+            <form action="/billing-portal" method="POST" class="w-full">
+              <button class="btn btn-outline w-full" type="submit">Manage Elite</button>
+              </form>
+              <% } else { %>
+              <!-- Navigate to Stripe (GET) -->
+              <a href="/checkout/elite" class="btn btn-primary w-full">Go Elite</a>
+              <% } %>
+            </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FAQ / Notes -->
+    <div class="max-w-5xl mx-auto mt-10">
+      <div class="collapse collapse-arrow bg-base-200">
+        <input type="checkbox" />
+        <div class="collapse-title text-lg font-medium">
+          How does billing work?
+        </div>
+        <div class="collapse-content text-sm text-gray-600">
+          <p>Plans renew monthly. You can cancel anytime via the <em>Manage Subscription</em> button, which opens the customer portal.</p>
+        </div>
+      </div>
+      <div class="collapse collapse-arrow bg-base-200 mt-2">
+        <input type="checkbox" />
+        <div class="collapse-title text-lg font-medium">
+          What happens after I upgrade?
+        </div>
+        <div class="collapse-content text-sm text-gray-600">
+          <p>On successful payment, your account is marked <strong>Premium</strong>/<strong>Elite</strong>. Your plan shows above; you can manage it any time.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <%- include('partials/footer.ejs') %>
+
+  <!-- (Leftover) Script: safe to keep; does nothing if the button doesn't exist -->
+  <script>
+    (function () {
+      const upgradeBtn = document.getElementById('upgradeBtn');
+      if (!upgradeBtn) return;
+      upgradeBtn.addEventListener('click', async () => {});
+    })();
+
+    // Cancel at period end (if premium)
+    (function () {
+      const cancelBtn = document.getElementById('cancelSubBtn');
+      if (!cancelBtn) return;
+
+      cancelBtn.addEventListener('click', async () => {
+        if (!confirm('Cancel your subscription at period end?')) return;
+
+        const original = cancelBtn.textContent;
+        cancelBtn.disabled = true;
+        cancelBtn.textContent = 'Processing…';
+
+        try {
+          const res = await fetch('/subscription/cancel', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin'
+          });
+          const data = await res.json();
+          if (data?.status === 'cancelling') {
+            alert(`Your subscription will end on ${new Date(data.endsAt).toDateString()}.`);
+            location.reload();
+            return;
+          }
+          throw new Error(data?.error || 'Unknown error');
+        } catch (err) {
+          console.error('Cancel error:', err);
+          alert('Failed to cancel. Please try again.');
+          cancelBtn.disabled = false;
+          cancelBtn.textContent = original;
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="cupcake">
+<%- include('partials/head.ejs', { pageTitle: 'Community Hub' }) %>
+<body data-theme="cupcake" class="bg-base-100 min-h-screen flex flex-col font-sans">
+  <!-- Navbar -->
+  <%- include('partials/navbar.ejs') %>
+
+  <!-- Main content -->
+  <main class="flex-grow container mx-auto p-4 md:p-8">
+    <h1 class="text-3xl md:text-4xl font-bold text-center mb-6 text-gray-800">Community Hub</h1>
+    <p class="text-center text-gray-600 mb-8">Share your stories, ask questions, and connect with other users!</p>
+
+    <!-- Create Post Form -->
+    <div class="card bg-base-200 shadow-xl p-6 mb-8 max-w-2xl mx-auto">
+      <h2 class="text-xl font-semibold mb-4">Create a New Post</h2>
+      <form action="/community/create-post" method="POST">
+        <div class="form-control mb-4">
+          <label class="label"><span class="label-text">Post Title</span></label>
+          <input type="text" name="title" class="input input-bordered w-full" required>
+        </div>
+        <div class="form-control mb-4">
+          <label class="label"><span class="label-text">Content</span></label>
+          <textarea name="content" class="textarea textarea-bordered w-full h-32" required></textarea>
+        </div>
+        <div class="form-control">
+          <button type="submit" class="btn btn-primary w-full">Share Post</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Post List -->
+    <div class="space-y-6">
+      <% if (posts.length > 0) { %>
+        <% posts.forEach(post => { %>
+          <div class="card bg-base-100 shadow-lg p-6 rounded-box">
+            <a href="/community/post/<%= post._id %>" class="link no-underline hover:underline">
+              <h3 class="text-2xl font-bold mb-2 text-gray-800"><%= post.title %></h3>
+            </a>
+            <p class="text-gray-600 mb-4 line-clamp-2"><%= post.content %></p>
+            <div class="text-sm text-gray-400 border-t border-gray-200 pt-4 mt-4">
+              Posted by <span class="font-semibold text-primary"><%= post.author.username %></span> on <%= post.createdAt.toDateString() %>
+            </div>
+            <!-- View Comments link -->
+            <div class="mt-4">
+              <a href="/community/post/<%= post._id %>" class="btn btn-sm btn-ghost">View Comments</a>
+            </div>
+          </div>
+        <% }) %>
+      <% } else { %>
+        <div class="text-center p-8 text-gray-500">
+          <p>No posts yet. Be the first to start a conversation!</p>
+        </div>
+      <% } %>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <%- include('partials/footer.ejs') %>
+  <script src="/js/socket.io.js"></script>
+</body>
+</html>

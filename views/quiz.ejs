@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="cupcake">
+<%- include('partials/head.ejs', { pageTitle: 'Daily Quiz' }) %>
+<body data-theme="cupcake" class="bg-base-100 min-h-screen flex flex-col font-sans">
+  <!-- Navbar -->
+  <%- include('partials/navbar.ejs') %>
+
+  <!-- Main content -->
+  <main class="flex-grow container mx-auto p-4 md:p-8 flex flex-col items-center">
+    <div class="card bg-base-200 shadow-xl p-6 md:p-10 w-full max-w-xl text-center">
+      <h1 class="text-3xl md:text-4xl font-bold mb-8 text-gray-800">Daily Quiz</h1>
+      
+      <div id="quiz-container">
+        <!-- The quiz question and options will be rendered here -->
+        <h2 class="text-2xl font-semibold mb-6" id="question-text"><%= quiz.question %></h2>
+        
+        <form id="quiz-form">
+          <input type="hidden" name="quizId" value="<%= quiz._id %>">
+          <div class="grid grid-cols-1 gap-4">
+            <% quiz.options.forEach(option => { %>
+              <div class="form-control">
+                <label class="label cursor-pointer p-4 bg-white rounded-lg shadow-md hover:bg-gray-100 transition-colors duration-200">
+                  <span class="label-text font-medium text-lg text-gray-700"><%= option %></span>
+                  <input type="radio" name="selectedAnswer" value="<%= option %>" class="radio radio-primary" required/>
+                </label>
+              </div>
+            <% }) %>
+          </div>
+          
+          <button type="submit" class="btn btn-primary w-full mt-8">Submit Answer</button>
+        </form>
+      </div>
+
+      <div id="result-container" class="mt-8 hidden">
+        <!-- The result of the quiz will be displayed here -->
+        <div role="alert" class="alert mb-4" id="result-alert">
+          <span id="result-message"></span>
+        </div>
+        <button class="btn btn-secondary w-full" onclick="window.location.reload()">Next Question</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <%- include('partials/footer.ejs') %>
+  <script src="/js/socket.io.js"></script>
+  <script>
+    document.getElementById('quiz-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const form = e.target;
+        const quizId = form.quizId.value;
+        const selectedAnswer = form.selectedAnswer.value;
+
+        try {
+            const response = await fetch('/quiz/submit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ quizId, selectedAnswer })
+            });
+            
+            const result = await response.json();
+            
+            const resultContainer = document.getElementById('result-container');
+            const resultAlert = document.getElementById('result-alert');
+            const resultMessage = document.getElementById('result-message');
+            
+            // Show the result container
+            resultContainer.classList.remove('hidden');
+            document.getElementById('quiz-container').classList.add('hidden');
+            
+            if (result.status === 'correct') {
+                resultAlert.classList.remove('alert-error');
+                resultAlert.classList.add('alert-success');
+                resultMessage.innerText = result.message;
+            } else {
+                resultAlert.classList.remove('alert-success');
+                resultAlert.classList.add('alert-error');
+                resultMessage.innerText = result.message;
+            }
+        } catch (err) {
+            console.error('Error submitting quiz answer:', err);
+            // Handle error (e.g., show a modal)
+        }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="cupcake">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AfroVibe - Find Your Connection</title>
+  <link href="/css/output.css" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.10/dist/full.min.css" rel="stylesheet">
+  <style>
+    .bg-custom {
+      background: linear-gradient(135deg, #FF6B6B, #FECA57);
+    }
+    .hero-bg {
+      background: url('/images/hero-bg.jpg') no-repeat center center/cover;
+      height: 70vh;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.4); /* Dark overlay for readability */
+    }
+  </style>
+</head>
+<body class="bg-base-100 min-h-screen">
+  <!-- Navbar -->
+  <div class="navbar bg-gradient-to-r from-[#FF6B6B] to-[#FECA57] shadow-lg mb-6">
+    <div class="navbar-start">
+      <a href="/" class="btn btn-ghost text-2xl font-bold text-white">🌍 AfroVibe</a>
+    </div>
+    <div class="navbar-end">
+      <a href="/login" class="btn btn-primary text-white mr-4">Login</a>
+      <a href="/signup" class="btn btn-secondary text-white">Sign Up</a>
+    </div>
+  </div>
+
+  <!-- Hero Section -->
+  <div class="hero-bg">
+    <div class="hero-overlay"></div>
+    <div class="relative z-10 flex items-center justify-center h-full text-center text-white">
+      <div class="hero-content">
+        <h1 class="text-5xl font-extrabold mb-4 drop-shadow-lg">Find Your Next Connection</h1>
+        <p class="text-xl mb-6 drop-shadow-md">Join our vibrant AfroVibe community to connect with people who share your heritage, passions, and dreams. Your perfect match awaits!</p>
+        <div class="space-x-4">
+          <a href="/signup" class="btn btn-primary text-white shadow-md">Get Started</a>
+          <a href="/about" class="btn btn-outline btn-secondary text-white shadow-md">Learn More</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="footer footer-center p-4 bg-base-300 text-base-content mt-auto">
+    <div>
+      <p>&copy; 2025 AfroVibe Dating. All rights reserved.</p>
+    </div>
+  </footer>
+</body>
+</html>

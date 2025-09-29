@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="cupcake">
+<%- include('partials/head.ejs', { pageTitle: 'Email Settings' }) %>
+<body data-theme="cupcake" class="bg-base-100 min-h-screen flex flex-col">
+  <%- include('partials/navbar.ejs') %>
+
+  <div class="container mx-auto p-4 flex-grow">
+    <div class="max-w-2xl mx-auto bg-base-200 p-8 rounded-2xl shadow-xl space-y-8">
+      <h2 class="text-3xl font-extrabold text-center text-primary">Email Settings</h2>
+      <p class="text-center text-gray-600">Update your email address.</p>
+
+      <div class="bg-base-100 p-6 rounded-xl shadow-lg">
+        <p class="mb-4 text-center text-lg">Your current email is: <span class="font-bold text-primary"><%= currentUser.email %></span></p>
+        
+        <form id="emailForm">
+          <div class="form-control mb-4">
+            <label class="label">
+              <span class="label-text">New Email</span>
+            </label>
+            <input type="email" name="newEmail" placeholder="new.email@example.com" class="input input-bordered w-full" required />
+          </div>
+
+          <div class="form-control mb-6">
+            <label class="label">
+              <span class="label-text">Confirm Password</span>
+            </label>
+            <input type="password" name="password" placeholder="Enter your current password" class="input input-bordered w-full" required />
+          </div>
+
+          <div class="form-control">
+            <button type="submit" class="btn btn-primary btn-block">Update Email</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <%- include('partials/modals.ejs') %>
+  <%- include('partials/footer.ejs') %>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/socket.io.js"></script>
+  <script>
+    function showAlertModal(title, message) {
+      const modal = document.getElementById('alertModal');
+      const alertTitle = document.getElementById('alertTitle');
+      const alertMessage = document.getElementById('alertMessage');
+      if (modal && alertTitle && alertMessage) {
+        alertTitle.innerText = title;
+        alertMessage.innerText = message;
+        modal.showModal();
+      }
+    }
+    
+    document.getElementById('emailForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const formData = new FormData(e.target);
+      const newEmail = formData.get('newEmail');
+      const password = formData.get('password');
+
+      if (!newEmail || !password) {
+        showAlertModal('Error', 'Please fill in all fields.');
+        return;
+      }
+
+      try {
+        const response = await fetch('/update-email', {
+          method: 'POST',
+          body: new URLSearchParams(formData).toString(),
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        });
+        const result = await response.json();
+        
+        if (result.success) {
+          showAlertModal('Success', result.message);
+          setTimeout(() => window.location.reload(), 1500); 
+        } else {
+          showAlertModal('Error', result.message);
+        }
+      } catch (err) {
+        console.error('Error updating email:', err);
+        showAlertModal('Error', 'An error occurred. Please try again.');
+      }
+    });
+
+    function closeModal(modalId) {
+      const modal = document.getElementById(modalId);
+      if (modal) modal.close();
+    }
+  </script>
+</body>
+</html>
