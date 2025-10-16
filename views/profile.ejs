@@ -64,6 +64,16 @@
                 <p class="text-gray-600 font-medium">Free Tier User</p>
               <% } %>
 
+              <!-- AFTER (normalized) -->
+<% const viewedPlan = planOf(user); %>
+<% if (viewedPlan === 'elite') { %>
+  <p class="text-purple-600 font-bold text-lg">Elite Member ✨</p>
+<% } else if (viewedPlan === 'premium') { %>
+  <p class="text-green-600 font-bold text-lg">Premium Member ✅</p>
+<% } else { %>
+  <p class="text-gray-600 font-medium">Free Tier User</p>
+<% } %>     
+
               <% if (user.profile && user.profile.location) { %>
                 <p class="text-xl text-gray-500"><%= user.profile.location %></p>
               <% } %>

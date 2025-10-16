@@ -538,7 +538,6 @@ app.post('/webhook', require('express').raw({ type: 'application/json' }), async
 app.set('trust proxy', 1);
 
 // Body parsers
-app.use(express.urlencoded({ extended: false }));
 app.use(express.urlencoded({ extended: true }));
 // Stripe webhook is already defined above with bodyParser.raw
 app.use(express.json());
@@ -749,6 +748,15 @@ const vMyProfile = [
   body('relationshipGoals').optional({ checkFalsy: true }).isString().trim().isLength({ max: 300 }),
   validate
 ];
+
+// expose plan helpers to templates (single source of truth)
+app.use((req, res, next) => {
+  res.locals.planOf = planOf;                 // planOf(user) => 'free' | 'premium' | 'elite'
+  res.locals.isElite = isElite;               // isElite(user) => boolean
+  res.locals.isPremiumPlan = (u) => planOf(u) !== 'free';
+  next();
+});
+
 
 app.use((req, res, next) => {
   res.locals.cspNonce = crypto.randomBytes(16).toString('base64');
@@ -2116,10 +2124,14 @@ app.get('/likes-you', checkAuth, async (req, res) => {
       Notification.countDocuments({ recipient: meId, read: false })
     ]);
 
+    const justRevealed = !!req.session.justRevealedLikes;
+    req.session.justRevealedLikes = undefined;
+
     return res.render('likes-you', {
       currentUser: { _id: meId, isPremium },
       people,
       blurred: !revealed, // <-- your EJS overlay key
+      justRevealed: req.query.revealed === '1',
       pageMeta: {
         page, limit, total, totalPages: Math.max(Math.ceil(total / limit), 1)
       },
@@ -2141,13 +2153,15 @@ app.post('/likes-you/reveal', checkAuth, async (req, res) => {
     const isPremium = !!me.isPremium || (me.plan && me.plan !== 'free');
     if (!isPremium) markRevealedLikesToday(req); // premium is always unblurred
 
+    // NEW: flash a “just revealed” once
+    req.session.justRevealedLikes = true;
+
     return res.redirect(303, '/likes-you');
   } catch (e) {
     console.error('likes-you reveal err', e);
     return res.redirect('/likes-you');
   }
 });
-
 
 app.get('/notifications', checkAuth, async (req, res) => {
   try {

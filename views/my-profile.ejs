@@ -20,6 +20,17 @@
             <% if (currentUser?.isVerified) { %>
               <div class="badge badge-success absolute -bottom-2 left-1/2 -translate-x-1/2">Verified</div>
             <% } %>
+            <!-- BEFORE -->
+<% if (currentUser?.isPremium) { %>
+  <span class="badge badge-secondary badge-lg">Premium</span>
+<% } %>
+
+<!-- AFTER (uses helper) -->
+<% if (planOf(currentUser) !== 'free') { %>
+  <span class="badge badge-secondary badge-lg">
+    <%= planOf(currentUser) === 'elite' ? 'Elite' : 'Premium' %>
+  </span>
+<% } %>
           </div>
 
           <!-- Name + meta + actions -->

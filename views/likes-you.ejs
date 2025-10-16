@@ -14,6 +14,12 @@
           <p class="opacity-70 text-sm">Like back to create a match and start chatting.</p>
         </div>
 
+        <% if (typeof justRevealed !== 'undefined' && justRevealed) { %>
+  <div class="alert alert-success mb-4">
+    <span>Your likes are revealed for today. Have fun! 🎉</span>
+  </div>
+<% } %>
+
         <% if (blurred) { %>
           <form method="post" action="/likes-you/reveal" class="flex items-center gap-2">
             <button class="btn btn-accent btn-sm" type="submit">Reveal (1 free today)</button>
