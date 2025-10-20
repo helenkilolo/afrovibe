@@ -14,3 +14,4 @@ function isBoostActive(user) {
 }
 
 module.exports = { haversineKm, isBoostActive };
+

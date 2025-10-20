@@ -26,17 +26,18 @@
         <h2 class="text-2xl font-semibold mb-4">Your Photos</h2>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <% if (userPhotos && userPhotos.length > 0) { %>
-            <% userPhotos.forEach(photo => { %>
-              <div class="card bg-base-100 shadow-md">
-                <figure><img src="<%= photo %>" alt="User photo" class="w-full h-48 object-cover"></figure>
-                <div class="card-body p-4">
-                  <form action="/photos/delete" method="POST" class="deleteForm" data-photo-url="<%= photo %>">
-                    <input type="hidden" name="photoUrl" value="<%= photo %>">
-                    <button type="submit" class="btn btn-sm btn-error w-full">Delete</button>
-                  </form>
-                </div>
-              </div>
-            <% }); %>
+  <% userPhotos.forEach((photo, idx) => { %>
+    <div class="card bg-base-100 shadow-md">
+      <figure><img src="<%= photo %>" alt="User photo" class="w-full h-48 object-cover"></figure>
+      <div class="card-body p-4">
+        <!-- UPDATED: post to /photos/delete/:photoIndex -->
+        <form action="/photos/delete/<%= idx %>" method="POST" class="deleteForm">
+          <button type="submit" class="btn btn-sm btn-error w-full">Delete</button>
+        </form>
+      </div>
+    </div>
+  <% }); %>
+<% } %>
           <% } else { %>
             <p class="text-gray-500 col-span-full text-center">You have no photos uploaded yet.</p>
           <% } %>

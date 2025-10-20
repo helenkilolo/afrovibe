@@ -12,12 +12,15 @@
           <p class="opacity-70 text-sm">Star people you don’t want to lose. Wave to break the ice.</p>
         </div>
         <div class="flex items-center gap-2">
-          <% if (currentUser.isPremium) { %>
-            <span class="badge badge-success">Premium</span>
-          <% } else { %>
-            <a href="/upgrade" class="btn btn-primary btn-sm">Upgrade</a>
-          <% } %>
-        </div>
+  <% const __plan = planOf(currentUser); %>
+  <% if (__plan === 'free') { %>
+    <a href="/upgrade" class="btn btn-primary btn-sm">Upgrade</a>
+  <% } else { %>
+    <span class="badge <%= __plan==='elite' ? 'badge-secondary' : 'badge-success' %> capitalize">
+      <%= __plan %>
+    </span>
+  <% } %>
+</div>
       </header>
 
       <div role="tablist" class="tabs tabs-bordered mb-4">
@@ -75,7 +78,7 @@
       <section id="me" class="mt-10">
         <div class="mb-2 font-semibold">People who favorited you</div>
 
-        <% const locked = !currentUser.isPremium; %>
+        <% const locked = (planOf(currentUser) === 'free'); %>
         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 relative">
           <% if (!favoritedMe.length) { %>
             <div class="col-span-full text-center opacity-60">No one has favorited you yet.</div>

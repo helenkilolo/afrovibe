@@ -20,9 +20,15 @@ const server = http.createServer(app);
 const io = socketio(server);
 app.set('io', io);
 const PORT = process.env.PORT || 3000;
+const HOST = process.env.HOST || '0.0.0.0';
 
 // ---- Stripe ----
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+
+function absoluteUrl(req, path = '/upgrade') {
+  const base = `${req.protocol}://${req.get('host')}`;
+  return new URL(path, base).href;
+}
 const BASE_URL = process.env.PUBLIC_BASE_URL || 'http://localhost:3000';
 
 // Price IDs (env)
@@ -534,13 +540,20 @@ app.post('/webhook', require('express').raw({ type: 'application/json' }), async
   }
 });
 
+// add before other app.use(...) and before any async middlewares
+app.get('/healthz', (req, res) => {
+  res.set('Content-Type', 'application/json');
+  res.status(200).send('{"ok":true}');
+});
+
+
 // --- Middleware ---
 app.set('trust proxy', 1);
 
 // Body parsers
-app.use(express.urlencoded({ extended: true }));
-// Stripe webhook is already defined above with bodyParser.raw
 app.use(express.json());
+
+app.use(express.urlencoded({ extended: true }));
 
 // Views and Static - Views first, then static before routes
 app.set('view engine', 'ejs');
@@ -751,10 +764,10 @@ const vMyProfile = [
 
 // expose plan helpers to templates (single source of truth)
 app.use((req, res, next) => {
+  const { planOf, isElite, isPremiumOrBetter } = require('./utils/helpers');
   res.locals.planOf = planOf;                 // planOf(user) => 'free' | 'premium' | 'elite'
   res.locals.isElite = isElite;               // isElite(user) => boolean
-  res.locals.isPremiumPlan = (u) => planOf(u) !== 'free';
-  next();
+  res.locals.isPremiumOrBetter = isPremiumOrBetter;
 });
 
 
@@ -769,6 +782,27 @@ app.use((req, res, next) => {
     (/^\/(like|dislike|interest|favorite|superlike|api\/(boost|favorites|interest|superlike))\b/.test(req.path))
   ) {
     console.log(`[HIT] ${req.method} ${req.path} CT=${req.headers['content-type'] || '-'} UA=${req.headers['user-agent'] || '-'}`);
+  }
+  next();
+});
+
+app.use(async (req, res, next) => {
+  res.locals.currentUser = null;
+  res.locals.unreadMessages = 0;
+  res.locals.unreadNotificationCount = 0;
+
+  if (!req.session.userId) return next();
+
+  try {
+    const currentUser = await User.findById(req.session.userId).lean();
+    if (currentUser) {
+      res.locals.currentUser = currentUser;
+      // keep your real implementations:
+      res.locals.unreadMessages = await getUnreadMessagesCount(req.session.userId);
+      res.locals.unreadNotificationCount = await getUnreadNotificationCount(req.session.userId);
+    }
+  } catch (err) {
+    console.error('locals user load err:', err);
   }
   next();
 });
@@ -1791,14 +1825,28 @@ app.get('/advanced-search', checkAuth, async (req, res) => {
     const currentUser = await User.findById(req.session.userId)
       .select('blockedUsers profile.lat profile.lng isPremium stripePriceId subscriptionPriceId')
       .lean();
+
     if (!currentUser) return res.redirect('/login');
+
+    // -- Helpers (local sanitizers) --
+    const ALLOWED_GENDERS = new Set(['Any', 'Male', 'Female', 'Non-binary']);
+    const normGender = (g) => {
+      const map = { Man: 'Male', Woman: 'Female', 'Nonbinary': 'Non-binary', 'Non binary': 'Non-binary' };
+      const val = (g || 'Any').trim();
+      const mapped = map[val] || val;
+      return ALLOWED_GENDERS.has(mapped) ? mapped : 'Any';
+    };
+    const safeRegex = (s) => {
+      if (!s) return null;
+      try { return new RegExp(String(s), 'i'); } catch { return null; }
+    };
 
     // 1) Collect incoming query in the same shape as /dashboard
     const rawFilters = {
-      seekingGender : req.query.seekingGender || 'Any',
+      seekingGender : normGender(req.query.seekingGender),
       minAge        : toTrimmed(req.query.minAge) || '',
       maxAge        : toTrimmed(req.query.maxAge) || '',
-      country       : req.query.country || 'Any',
+      country       : (req.query.country || 'Any').trim(),
       stateProvince : toTrimmed(req.query.stateProvince) || '',
       city          : toTrimmed(req.query.city) || '',
       q             : toTrimmed(req.query.q) || '',
@@ -1818,24 +1866,39 @@ app.get('/advanced-search', checkAuth, async (req, res) => {
       smoking       : toTrimmed(req.query.smoking) || '',
       drinking      : toTrimmed(req.query.drinking) || '',
       videoChat     : toTrimmed(req.query.videoChat || ''), // '' | '1' | '0'
-      sort          : req.query.sort || 'active',           // active | recent | distance | ageAsc | ageDesc
+      sort          : (req.query.sort || 'active'),         // active | recent | distance | ageAsc | ageDesc
     };
 
+    // Normalize min/max age (swap if reversed)
+    const minAgeRaw = toInt(rawFilters.minAge);
+    const maxAgeRaw = toInt(rawFilters.maxAge);
+    if (minAgeRaw != null && maxAgeRaw != null && minAgeRaw > maxAgeRaw) {
+      rawFilters.minAge = String(maxAgeRaw);
+      rawFilters.maxAge = String(minAgeRaw);
+    }
+
     // 2) Premium/plan gating (same clamp you use on /dashboard)
-    const { filters: f1, locks: l1 } =
-      clampFiltersForFree(rawFilters, !!(typeof isPremiumOrBetter === 'function' ? isPremiumOrBetter(currentUser) : currentUser.isPremium), !!(typeof isElite === 'function' ? isElite(currentUser) : false));
-    const { filters, locks: l2 } = clampFiltersByPlan(f1, currentUser);
-    const premiumLocks = { ...l1, ...l2 };
+    const isPrem = typeof isPremiumOrBetter === 'function'
+      ? isPremiumOrBetter(currentUser)
+      : !!currentUser.isPremium;
+    const isElit = typeof isElite === 'function' ? isElite(currentUser) : false;
+
+    const { filters: f1, locks: l1 } = clampFiltersForFree(rawFilters, isPrem, isElit);
+    const { filters, locks: l2 }     = clampFiltersByPlan(f1, currentUser);
+    const premiumLocks               = { ...l1, ...l2 };
 
     // 3) Base query (exclude me + blocked; require profile)
     const excluded = [
       currentUser._id,
-      ...((currentUser.blockedUsers || []).map(id => id))
+      ...((currentUser.blockedUsers || []).map(id => id)),
     ];
+
     const query = { _id: { $nin: excluded }, profile: { $exists: true } };
 
     // Gender
-    if (filters.seekingGender !== 'Any') query['profile.gender'] = filters.seekingGender;
+    if (filters.seekingGender !== 'Any') {
+      query['profile.gender'] = filters.seekingGender;
+    }
 
     // Age
     const minAge = toInt(filters.minAge);
@@ -1846,14 +1909,16 @@ app.get('/advanced-search', checkAuth, async (req, res) => {
 
     // Location
     if (filters.country !== 'Any') query['profile.country'] = filters.country;
-    if (filters.stateProvince)     query['profile.stateProvince'] = new RegExp(filters.stateProvince, 'i');
-    if (filters.city)              query['profile.city'] = new RegExp(filters.city, 'i');
+    const reState = safeRegex(filters.stateProvince);
+    const reCity  = safeRegex(filters.city);
+    if (reState) query['profile.stateProvince'] = reState;
+    if (reCity)  query['profile.city']          = reCity;
 
     // Free-text & interests
     if (filters.q) {
       query.$or = [
-        { username: new RegExp(filters.q, 'i') },
-        { 'profile.bio': new RegExp(filters.q, 'i') },
+        { username: safeRegex(filters.q) || filters.q },
+        { 'profile.bio': safeRegex(filters.q) || filters.q },
       ];
     }
     if (filters.interests) {
@@ -1872,8 +1937,8 @@ app.get('/advanced-search', checkAuth, async (req, res) => {
     }
 
     // Faith / language / lifestyle
-    if (filters.religion)     query['profile.religion']     = new RegExp(filters.religion, 'i');
-    if (filters.denomination) query['profile.denomination'] = new RegExp(filters.denomination, 'i');
+    if (filters.religion)     query['profile.religion']     = safeRegex(filters.religion)     || filters.religion;
+    if (filters.denomination) query['profile.denomination'] = safeRegex(filters.denomination) || filters.denomination;
 
     if (filters.languages && String(filters.languages).trim() !== '') {
       const langs = Array.isArray(filters.languages)
@@ -1882,26 +1947,24 @@ app.get('/advanced-search', checkAuth, async (req, res) => {
       if (langs.length) query['profile.languages'] = { $in: langs };
     }
 
-    if (filters.education) query['profile.education'] = new RegExp(filters.education, 'i');
-    if (filters.smoking)   query['profile.smoking']   = new RegExp(filters.smoking, 'i');
-    if (filters.drinking)  query['profile.drinking']  = new RegExp(filters.drinking, 'i');
+    if (filters.education) query['profile.education'] = safeRegex(filters.education) || filters.education;
+    if (filters.smoking)   query['profile.smoking']   = safeRegex(filters.smoking)   || filters.smoking;
+    if (filters.drinking)  query['profile.drinking']  = safeRegex(filters.drinking)  || filters.drinking;
 
-    // --- Video chat availability (top-level field) ---
+    // Video chat availability (top-level field)
     // clampFiltersByPlan already blanked filters.videoChat for non-Elite
     if (filters.videoChat === '1') {
       query.videoChat = true;
     } else if (filters.videoChat === '0') {
-      // treat missing/false as "No"
-      query.videoChat = { $ne: true };
+      query.videoChat = { $ne: true }; // treat missing/false as "No"
     }
 
-    // 4) Sorting (boost first, then requested base sort)
+    // 4) Sorting (boost first, then requested base sort; distance handled after distance calc)
     const sortKey = filters.sort || 'active';
     let sortBase = { lastActive: -1, _id: -1 };
-    if (sortKey === 'recent')   sortBase = { createdAt: -1, _id: -1 };
-    if (sortKey === 'ageAsc')   sortBase = { 'profile.age': 1,  _id: -1 };
-    if (sortKey === 'ageDesc')  sortBase = { 'profile.age': -1, _id: -1 };
-    // distance handled after we compute it
+    if (sortKey === 'recent')  sortBase = { createdAt: -1, _id: -1 };
+    if (sortKey === 'ageAsc')  sortBase = { 'profile.age': 1,  _id: -1 };
+    if (sortKey === 'ageDesc') sortBase = { 'profile.age': -1, _id: -1 };
     const sort = { boostExpiresAt: -1, ...sortBase };
 
     // 5) Paging
@@ -1940,7 +2003,7 @@ app.get('/advanced-search', checkAuth, async (req, res) => {
     ]);
 
     // 8) Enhance results (online + distance + boost flag)
-    const now = Date.now();
+    const now   = Date.now();
     const meLat = currentUser?.profile?.lat;
     const meLng = currentUser?.profile?.lng;
 
@@ -1956,7 +2019,7 @@ app.get('/advanced-search', checkAuth, async (req, res) => {
 
     let people = (rawList || []).map(enhance);
 
-    // 9) Radius filter + distance sort (final step)
+    // 9) Radius filter + distance sort (final step; after enhancement)
     const radiusKm = toInt(filters.radiusKm, 0) || 0;
     if (radiusKm > 0 && typeof meLat === 'number' && typeof meLng === 'number') {
       people = people.filter(u => typeof u.distanceKm === 'number' && u.distanceKm <= radiusKm);
@@ -1965,7 +2028,7 @@ app.get('/advanced-search', checkAuth, async (req, res) => {
       people.sort((a, b) => (a.distanceKm ?? 1e9) - (b.distanceKm ?? 1e9));
     }
 
-    // 10) Navbar unread badges
+    // 10) Navbar unread badges (if you don't already set these in res.locals)
     const [unreadMessages, unreadNotificationCount] = await Promise.all([
       Message.countDocuments({
         recipient: currentUser._id,
@@ -1992,11 +2055,10 @@ app.get('/advanced-search', checkAuth, async (req, res) => {
       unreadNotificationCount,
     });
   } catch (err) {
-    console.error('advanced-search err', err);
+    console.error('advanced-search err:', err);
     return res.status(500).render('error', { status: 500, message: 'Failed to load Advanced Search.' });
   }
 });
-
 
 // GET /viewed-you
 app.get('/viewed-you', checkAuth, async (req, res) => {
@@ -2068,9 +2130,40 @@ function markRevealedLikesToday(req) {
   req.session.likesYouRevealDay = dayKey();
 }
 
-// (Optional) Only needed if you also track profile views (/viewed-you)
-// async function pushCappedArray(userId, path, doc, max = 300) { ... }
+// Optional legacy middleware you might use elsewhere; canonicalized keys
+function requirePremiumOrDailyReveal(limit = 1, { graceHours = 72, verifiedBonus = 1 } = {}) {
+  return async (req, res, next) => {
+    const u = await User.findById(req.session.userId);
+    if (!u) return res.redirect('/login');
 
+    if (isPremiumOrBetter(u)) return next();
+
+    // Grace example (keep your own logic)
+    const createdAt = u.createdAt ? new Date(u.createdAt).getTime() : 0;
+    const nowMs = Date.now();
+    const graceOk = !!createdAt && (nowMs - createdAt) <= graceHours * 3600 * 1000;
+    if (graceOk) return next();
+
+    // Daily counters on user doc (optional)
+    const today = dayKey();
+    if (u.likesYouRevealDay !== today) {
+      u.likesYouRevealDay = today;
+      u.likesYouRevealCount = 0;
+    }
+    const allowance = limit + (u.verifiedAt ? verifiedBonus : 0);
+    if ((u.likesYouRevealCount || 0) < allowance) {
+      u.likesYouRevealCount = (u.likesYouRevealCount || 0) + 1;
+      await u.save();
+      req.session.likesYouRevealDay = today;
+      return next();
+    }
+
+    return res.status(402).render('paywall', {
+      feature: 'Who liked you',
+      allowance, used: u.likesYouRevealCount
+    });
+  };
+}
 // ---------- "Who Liked You" ----------
 app.get('/likes-you', checkAuth, async (req, res) => {
   try {
@@ -3525,86 +3618,183 @@ app.post('/create-checkout-session', checkAuth, async (req, res) => {
     const user = await User.findById(userId).lean();
     if (!user) return res.status(404).send('User not found');
 
-    const plan = (req.body.plan || 'premium').toLowerCase(); // 'premium' | 'elite'
-    const priceId = plan === 'elite' ? STRIPE_PRICE_ID_ELITE : STRIPE_PRICE_ID_PREMIUM;
+    // plan: 'premium' | 'elite'
+    const plan = String(req.body.plan || 'premium').toLowerCase();
+    const priceId = plan === 'elite' ? process.env.STRIPE_PRICE_ID_ELITE : process.env.STRIPE_PRICE_ID_PREMIUM;
     if (!priceId) return res.status(400).send(`Price not configured for ${plan}`);
+
+    const successUrl = BASE_URL ? `${BASE_URL}/upgrade/success?session_id={CHECKOUT_SESSION_ID}`
+                                : absoluteUrl(req, '/upgrade/success?session_id={CHECKOUT_SESSION_ID}');
+    const cancelUrl  = BASE_URL ? `${BASE_URL}/upgrade?upgradeError=cancelled`
+                                : absoluteUrl(req, '/upgrade?upgradeError=cancelled');
 
     const params = {
       mode: 'subscription',
       line_items: [{ price: priceId, quantity: 1 }],
-      // Include session_id on success so we can update the user w/o a webhook
-      success_url: `${BASE_URL}/upgrade/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url:  `${BASE_URL}/upgrade?upgradeError=cancelled`,
+      success_url: successUrl,
+      cancel_url:  cancelUrl,
       client_reference_id: String(userId),
       metadata: { userId: String(userId), plan },
       allow_promotion_codes: true,
     };
+
+    // Reuse customer if we already have one
     if (user.stripeCustomerId) params.customer = user.stripeCustomerId;
 
     const session = await stripe.checkout.sessions.create(params);
     return res.redirect(303, session.url);
   } catch (err) {
-    console.error('create-checkout-session err', err);
+    console.error('create-checkout-session err:', err);
     return res.status(500).send('Failed to create checkout session');
   }
 });
 
+// ===== Checkout Success (no webhook requirement for MVP) =====
 app.get('/upgrade/success', checkAuth, async (req, res) => {
   try {
     const { session_id } = req.query;
     if (!session_id) return res.redirect('/upgrade?upgradeError=Missing session');
 
-    const session = await stripe.checkout.sessions.retrieve(session_id);
+    const session = await stripe.checkout.sessions.retrieve(String(session_id), {
+      expand: ['subscription.items.data.price']
+    });
+
     if (!session || session.mode !== 'subscription') {
       return res.redirect('/upgrade?upgradeError=Invalid session');
     }
 
-    const userId        = session.metadata?.userId || session.client_reference_id;
-    const subscriptionId= session.subscription;
-    const customerId    = session.customer;
+    const userId         = session.metadata?.userId || session.client_reference_id;
+    const subscriptionId = typeof session.subscription === 'string'
+      ? session.subscription
+      : session.subscription?.id;
+    const customerId     = typeof session.customer === 'string'
+      ? session.customer
+      : session.customer?.id;
 
-    // Fetch subscription to get active price id
+    // Price id from the active subscription line
     let priceId = null;
     if (subscriptionId) {
-      const sub = await stripe.subscriptions.retrieve(subscriptionId);
+      const sub = await stripe.subscriptions.retrieve(subscriptionId, { expand: ['items.data.price'] });
       priceId = sub.items?.data?.[0]?.price?.id || null;
     }
 
     if (userId) {
       await User.findByIdAndUpdate(userId, {
-        stripeCustomerId: customerId,
-        stripeSubscriptionId: subscriptionId,
-        stripePriceId: priceId,
-        subscriptionPriceId: priceId,
-        isPremium: true,
-        subscriptionStatus: 'active',
-        subscriptionEndsAt: null,
+        $set: {
+          stripeCustomerId: customerId || null,
+          stripeSubscriptionId: subscriptionId || null,
+          stripePriceId: priceId || null,
+          subscriptionPriceId: priceId || null,
+          isPremium: true,
+          subscriptionStatus: 'active',
+          subscriptionEndsAt: null
+        }
       });
     }
 
     return res.redirect('/upgrade?upgradeSuccess=1');
   } catch (err) {
-    console.error('upgrade success err', err);
+    console.error('upgrade success err:', err);
     return res.redirect('/upgrade?upgradeError=Could not finalize');
   }
 });
 
-// ===== Billing Portal (Manage Subscription) =====
+// PRODUCTION-READY: Manage Subscription (Stripe Billing Portal)
 app.post('/billing-portal', checkAuth, async (req, res) => {
+  const startedAt = Date.now();
+
+  // ---- helpers ----
+  const baseUrlFromReq = () => {
+    // Works behind a proxy if you set: app.set('trust proxy', 1)
+    const proto = (req.headers['x-forwarded-proto'] || req.protocol || 'http').split(',')[0].trim();
+    const host  = (req.headers['x-forwarded-host']  || req.get('host'));
+    return `${proto}://${host}`;
+  };
+  const absoluteUrl = (path) =>
+    (process.env.BASE_URL ? new URL(path, process.env.BASE_URL).href
+                          : new URL(path, baseUrlFromReq()).href);
+
+  const timeoutAfter = (ms, label) =>
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms));
+
   try {
     if (!stripe) return res.redirect('/upgrade?upgradeError=Stripe not configured');
+
     const user = await User.findById(req.session.userId).lean();
-    if (!user?.stripeCustomerId) {
-      return res.redirect('/upgrade?upgradeError=No Stripe customer on file');
+    if (!user) return res.redirect('/login');
+
+    // 1) Resolve customer id, backfill from subscription if needed
+    let customerId = user.stripeCustomerId;
+    if (!customerId && user.stripeSubscriptionId) {
+      try {
+        const sub = await Promise.race([
+          stripe.subscriptions.retrieve(user.stripeSubscriptionId),
+          timeoutAfter(12_000, 'Retrieve subscription')
+        ]);
+        const cust = typeof sub.customer === 'string' ? sub.customer : sub.customer?.id || null;
+        if (cust) {
+          customerId = cust;
+          await User.updateOne({ _id: user._id }, { $set: { stripeCustomerId: cust } });
+        }
+      } catch (e) {
+        // soft-fail; we’ll error out below if still missing
+        console.warn('[billing-portal] backfill failed');
+      }
     }
-    const portal = await stripe.billingPortal.sessions.create({
-      customer: user.stripeCustomerId,
-      return_url: `${BASE_URL}/upgrade`
-    });
-    return res.redirect(303, portal.url);
+    if (!customerId) {
+      return res.redirect('/upgrade?upgradeError=No Stripe customer on file. Complete checkout first.');
+    }
+
+    // 2) Guard against key/data mode mismatch (very common prod bug)
+    try {
+      const cust = await Promise.race([
+        stripe.customers.retrieve(customerId),
+        timeoutAfter(12_000, 'Retrieve customer')
+      ]);
+      const key = process.env.STRIPE_SECRET_KEY || '';
+      const keyMode  = key.startsWith('sk_live_') ? 'live' : (key.startsWith('sk_test_') ? 'test' : 'unknown');
+      const custMode = cust.livemode ? 'live' : 'test';
+      if (keyMode !== custMode) {
+        return res.redirect(`/upgrade?upgradeError=Stripe key/data mode mismatch (${keyMode.toUpperCase()} vs ${custMode.toUpperCase()}).`);
+      }
+    } catch {
+      return res.redirect('/upgrade?upgradeError=Stripe customer not found or unreachable.');
+    }
+
+    // 3) Build a safe return URL (HTTPS in prod, localhost ok in test)
+    const returnUrl = process.env.BILLING_PORTAL_RETURN_URL || absoluteUrl('/upgrade');
+
+    // 4) Create portal session; if a bad configuration id is set, fall back to default
+    const args = { customer: customerId, return_url: returnUrl };
+
+    if (process.env.STRIPE_PORTAL_CONFIG_ID) {
+      try {
+        const cfg = await Promise.race([
+          stripe.billingPortal.configurations.retrieve(process.env.STRIPE_PORTAL_CONFIG_ID),
+          timeoutAfter(8_000, 'Retrieve portal configuration')
+        ]);
+        if (cfg?.id) args.configuration = cfg.id;
+      } catch {
+        // Invalid/other-account/mode config id — ignore and use default
+      }
+    }
+
+    const session = await Promise.race([
+      stripe.billingPortal.sessions.create(args),
+      timeoutAfter(12_000, 'Create portal session')
+    ]);
+
+    // 5) Redirect user to Stripe-hosted portal
+    // Minimal log: duration only (avoid logging PII/ids in prod)
+    console.info(`[billing-portal] ok in ${Date.now() - startedAt}ms`);
+    return res.redirect(303, session.url);
+
   } catch (err) {
-    console.error('billing-portal err', err);
-    return res.redirect('/upgrade?upgradeError=Could not open billing portal');
+    // Friendly, non-leaky error message for users; keep details out of the UI
+    const msg = String(err?.message || 'Could not open billing portal.');
+    // Optional: you can branch on known messages here if you want finer UX
+    console.error('[billing-portal] error'); // keep logs terse in prod
+    return res.redirect('/upgrade?upgradeError=' + encodeURIComponent('Could not open billing portal.'));
   }
 });
 
@@ -3618,29 +3808,9 @@ app.post('/subscription/cancel', checkAuth, async (req, res) => {
     const sub = await stripe.subscriptions.update(user.stripeSubscriptionId, { cancel_at_period_end: true });
     return res.json({ status: 'cancelling', endsAt: sub.current_period_end * 1000 });
   } catch (err) {
-    console.error('cancel sub err', err);
+    console.error('cancel sub err:', err);
     return res.status(500).json({ error: 'Failed to cancel' });
   }
-});
-
-app.use(async (req, res, next) => {
-  res.locals.currentUser = null;
-  res.locals.unreadMessages = 0;
-  res.locals.unreadNotificationCount = 0;
-
-  if (req.session.userId) {
-    try {
-      const currentUser = await User.findById(req.session.userId); // no populate
-      if (currentUser) {
-        res.locals.currentUser = currentUser;
-        res.locals.unreadMessages = await getUnreadMessagesCount(req.session.userId);
-        res.locals.unreadNotificationCount = await getUnreadNotificationCount(req.session.userId);
-      }
-    } catch (err) {
-      console.error('Error fetching current user:', err);
-    }
-  }
-  next();
 });
 
 // ---- helpers ----
@@ -4175,7 +4345,6 @@ app.use((err, req, res, next) => {
   }
 });
 
-// Start Server
-server.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
+app.listen(PORT, HOST, () => {
+  console.log(`Server listening on http://localhost:${PORT}`);
 });
