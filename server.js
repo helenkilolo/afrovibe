@@ -29,6 +29,21 @@ function absoluteUrl(req, path = '/upgrade') {
   const base = `${req.protocol}://${req.get('host')}`;
   return new URL(path, base).href;
 }
+
+app.use((req, res, next) => {
+  const start = Date.now();
+  const url = req.originalUrl;
+  let flagged = false;
+  const timer = setTimeout(() => { flagged = true; console.warn('[slow] >5s', req.method, url); }, 5000);
+  res.on('finish', () => {
+    clearTimeout(timer);
+    const ms = Date.now() - start;
+    console.log(`${req.method} ${url} -> ${res.statusCode} in ${ms}ms${flagged?' [SLOW]':''}`);
+  });
+  next();
+});
+
+
 const BASE_URL = process.env.PUBLIC_BASE_URL || 'http://localhost:3000';
 
 // Price IDs (env)
@@ -45,6 +60,17 @@ function planOf(u) {
 }
 function isElite(u){ return planOf(u) === 'elite'; }
 function isPremiumOrBetter(u){ const p = planOf(u); return p === 'premium' || p === 'elite'; }
+
+const RTC_CONFIG = {
+  iceServers: [
+    { urls: ['stun:stun.l.google.com:19302'] },
+    ...(process.env.TURN_URL ? [{
+      urls: [process.env.TURN_URL],
+      username: process.env.TURN_USER || '',
+      credential: process.env.TURN_PASS || ''
+    }] : [])
+  ]
+};
 
 const SMTP_HOST = process.env.SMTP_HOST || '';
 const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
@@ -93,6 +119,12 @@ async function sendEmail(to, subject, html) {
   }
 }
 
+function toInt(v, def = null) {
+  if (v == null || v === '') return def;
+  const n = Number.parseInt(v, 10);
+  return Number.isFinite(n) ? n : def;
+}
+
 
 // --- tiny helpers used in filters and paging
 const toTrimmed = (v) => {
@@ -101,12 +133,27 @@ const toTrimmed = (v) => {
   return String(v).trim();
 };
 
-const toInt = (v, def = null) => {
-  const n = parseInt(v, 10);
-  return Number.isNaN(n) ? def : n;
-};
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const toRad = d => (d * Math.PI) / 180;
+  if (
+    typeof lat1 !== 'number' || typeof lon1 !== 'number' ||
+    typeof lat2 !== 'number' || typeof lon2 !== 'number'
+  ) return null;
+  const R = 6371;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat/2)**2 +
+            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+            Math.sin(dLon/2)**2;
+  return Math.round(R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))) * 10) / 10;
+}
 
-// ---- helpers (server.js) ----
+// Show a lightning badge if boost has time left (adjust field names to yours)
+function computeBoostActive(u, nowMs = Date.now()) {
+  if (!u?.boostExpiresAt) return false;
+  return new Date(u.boostExpiresAt).getTime() > nowMs;
+}
+
 
 // Fast mutual check for the /matches page using in-memory sets
 function buildLikeSets(currentUser) {
@@ -541,10 +588,9 @@ app.post('/webhook', require('express').raw({ type: 'application/json' }), async
 });
 
 // add before other app.use(...) and before any async middlewares
-app.get('/healthz', (req, res) => {
-  res.set('Content-Type', 'application/json');
-  res.status(200).send('{"ok":true}');
-});
+// --- fast health before anything else ---
+app.get('/healthz', (req, res) => res.json({ ok: true }));
+app.get('/ping', (req, res) => res.type('text').send('pong'));
 
 
 // --- Middleware ---
@@ -563,7 +609,9 @@ app.set('views', path.join(__dirname, 'views'));
 // Serve uploads and public assets before any auth-protected routes
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(express.static(path.join(__dirname, 'public')));
-
+app.use('/js',     express.static(path.join(__dirname, 'public/js')));
+app.use('/images', express.static(path.join(__dirname, 'public/images')));
+app.use('/css',    express.static(path.join(__dirname, 'public/css')));
 // Sessions after trust proxy, before routes
 app.use(session({
   secret: process.env.SESSION_SECRET || 'dev-secret',
@@ -617,17 +665,67 @@ const { Types: { ObjectId } } = require('mongoose');
 const MESSAGE_LIMIT_WINDOW_MS = 15_000; // 15s window
 const MESSAGE_LIMIT_COUNT = 8;
 
-io.on('connection', (socket) => {
-  console.log(`User connected: ${socket.id}`);
+// ===== Socket.IO setup =====
 
-  socket.data.userId = null;
+// 1) Share session with Socket.IO first (you likely already have a session adapter; keep it)
+//    Make sure req.session is available as socket.request.session
+// io.engine.use(sessionMiddleware) ... (keep your existing code)
+
+// 2) Attach auth / eligibility middlewares BEFORE 'connection'
+io.use((socket, next) => {
+  const sess = socket.request?.session;
+  if (!sess?.userId) return next(new Error('unauthorized'));
+  socket.userId = String(sess.userId); // stash normalized userId
+  next();
+});
+
+// If you have isElite / isPremiumOrBetter locally defined, use those;
+// otherwise import from your helpers:
+// const { isElite, isPremiumOrBetter } = require('./utils/helpers');
+
+function canVideoChat(user) {
+  // Example policy: Elite OR Premium with profile.videoChat enabled
+  return isElite(user) || (isPremiumOrBetter(user) && user.videoChat === true);
+}
+
+io.use(async (socket, next) => {
+  try {
+    // Load minimal user fields for gating
+    const user = await User.findById(socket.userId)
+      .select('isPremium stripePriceId subscriptionPriceId videoChat')
+      .lean();
+    if (!user) return next(new Error('unauthorized'));
+    // Gate only RTC features; still allow chat if you prefer.
+    // If you want gating only on RTC, move this check into the RTC handlers instead.
+    // Here we keep it global to keep it simple:
+    socket.canVideoChat = canVideoChat(user);
+    next();
+  } catch (e) {
+    next(e);
+  }
+});
+
+// 3) Single connection handler for BOTH chat and RTC
+io.on('connection', (socket) => {
+  console.log(`User connected: ${socket.id} (uid=${socket.userId})`);
+
+  // --- Common rooms: unify on a single room key ---
+  // Choose ONE format and stick with it everywhere:
+  //   A) plain uid (simpler), or
+  //   B) "user:<uid>" (namespaced)
+  // You previously used both; let's normalize to plain uid:
+  socket.join(socket.userId);
+
+  // --- State for chat rate-limiting ---
   socket.data.msgCount = 0;
   socket.data.msgWindowStart = Date.now();
-
   const MESSAGE_LIMIT_WINDOW_MS = 10_000;
   const MESSAGE_LIMIT_COUNT = 40;
 
-  function isValidId(id) { return typeof id === 'string' && ObjectId.isValid(id); }
+  function isValidId(id) {
+    return typeof id === 'string' && ObjectId.isValid(id);
+  }
+
   function checkRateLimit() {
     const now = Date.now();
     if (now - socket.data.msgWindowStart > MESSAGE_LIMIT_WINDOW_MS) {
@@ -642,51 +740,59 @@ io.on('connection', (socket) => {
     try {
       if (!ObjectId.isValid(userId)) return;
       const me = new ObjectId(userId);
-      const unread = await Message.countDocuments({ recipient: me, read: false, deletedFor: { $nin: [me] } });
-      io.to(String(userId)).emit('unread_update', { unread });
+      const unread = await Message.countDocuments({
+        recipient: me,
+        read: false,
+        deletedFor: { $nin: [me] }
+      });
+      io.to(userId).emit('unread_update', { unread });
     } catch (e) {
       console.error('unread emit err', e);
     }
   }
 
+  // ---------- Chat events ----------
   socket.on('register_for_notifications', (userId) => {
     try {
       const uid = String(userId || '');
       if (!isValidId(uid)) return;
       socket.join(uid);
-      socket.data.userId = uid;
       console.log(`User ${uid} registered on ${socket.id}`);
     } catch (e) {
       console.error('register_for_notifications error', e);
     }
   });
 
-  // typing indicator (align name with client)
   socket.on('chat:typing', (payload) => {
     try {
       const to = payload && String(payload.to || '');
       if (!isValidId(to)) return;
-      io.to(to).emit('chat:typing', { from: socket.data.userId });
+      io.to(to).emit('chat:typing', { from: socket.userId });
     } catch (e) {
       console.error('typing err', e);
     }
   });
 
-  // OPTIONAL: socket-based send (DISABLED to avoid dupes; you send via HTTP)
+  // OPTIONAL real-time send (kept disabled to avoid dupes; you post via HTTP)
   socket.on('chat_message', async (data, ack) => {
     if (process.env.ENABLE_SOCKET_SEND !== '1') {
       if (typeof ack === 'function') ack({ ok: false, error: 'disabled' });
       return;
     }
     try {
-      if (!checkRateLimit()) { if (typeof ack === 'function') ack({ ok: false, error: 'rate_limited' }); return; }
-      const sender = String(data?.sender || '');
+      if (!checkRateLimit()) {
+        if (typeof ack === 'function') ack({ ok: false, error: 'rate_limited' });
+        return;
+      }
+      const sender    = String(data?.sender || '');
       const recipient = String(data?.recipient || '');
-      let content = (typeof data?.content === 'string' ? data.content : '').trim();
+      let content     = (typeof data?.content === 'string' ? data.content : '').trim();
       if (!isValidId(sender) || !isValidId(recipient) || !content) {
-        if (typeof ack === 'function') ack({ ok: false, error: 'invalid' }); return;
+        if (typeof ack === 'function') ack({ ok: false, error: 'invalid' });
+        return;
       }
       if (content.length > 4000) content = content.slice(0, 4000);
+
       const newMessage = await Message.create({ sender, recipient, content, read: false });
       io.to(recipient).emit('new_message', newMessage);
       io.to(sender).emit('new_message', newMessage);
@@ -698,17 +804,49 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('rtc:offer',    ({ to, sdp, from }) => io.to(String(to)).emit('rtc:offer',    { from, sdp }));
-  socket.on('rtc:answer',   ({ to, sdp, from }) => io.to(String(to)).emit('rtc:answer',   { from, sdp }));
-  socket.on('rtc:candidate',({ to, cand,from }) => io.to(String(to)).emit('rtc:candidate',{ from, cand }));
-  socket.on('rtc:hangup',   ({ to, from })      => io.to(String(to)).emit('rtc:hangup',   { from }));
-  socket.on('rtc:decline',  ({ to, from })      => io.to(String(to)).emit('rtc:decline',  { from }));
+  // ---------- RTC signaling ----------
+  // If you want to fully block non-eligible users from RTC, enforce here:
+  function requireRTC() {
+    if (socket.canVideoChat) return true;
+    // tell caller they're not eligible
+    socket.emit('rtc:error', { code: 'upgrade-required' });
+    return false;
+  }
+
+  socket.on('rtc:call', (payload) => {
+    if (!requireRTC()) return;
+    const { to, meta } = payload || {};
+    if (!to) return;
+    io.to(String(to)).emit('rtc:incoming', { from: socket.userId, meta: meta || {} });
+  });
+
+  socket.on('rtc:offer', ({ to, sdp }) => {
+    if (!requireRTC()) return;
+    if (!to || !sdp) return;
+    io.to(String(to)).emit('rtc:offer', { from: socket.userId, sdp });
+  });
+
+  socket.on('rtc:answer', ({ to, sdp }) => {
+    if (!requireRTC()) return;
+    if (!to || !sdp) return;
+    io.to(String(to)).emit('rtc:answer', { from: socket.userId, sdp });
+  });
+
+  socket.on('rtc:candidate', ({ to, candidate }) => {
+    if (!requireRTC()) return;
+    if (!to || !candidate) return;
+    io.to(String(to)).emit('rtc:candidate', { from: socket.userId, candidate });
+  });
+
+  socket.on('rtc:end', ({ to, reason }) => {
+    if (!to) return;
+    io.to(String(to)).emit('rtc:end', { from: socket.userId, reason: reason || 'hangup' });
+  });
 
   socket.on('disconnect', () => {
-    console.log(`User disconnected: ${socket.id}`);
+    // optional: cleanup/logs
   });
 });
-
 
 const AnalyticsEvent = mongoose.model('AnalyticsEvent', new Schema({
   user: { type: Types.ObjectId, ref: 'User', index: true, sparse: true },
@@ -764,12 +902,11 @@ const vMyProfile = [
 
 // expose plan helpers to templates (single source of truth)
 app.use((req, res, next) => {
-  const { planOf, isElite, isPremiumOrBetter } = require('./utils/helpers');
-  res.locals.planOf = planOf;                 // planOf(user) => 'free' | 'premium' | 'elite'
-  res.locals.isElite = isElite;               // isElite(user) => boolean
+  res.locals.planOf = planOf;
+  res.locals.isElite = isElite;
   res.locals.isPremiumOrBetter = isPremiumOrBetter;
+  next();
 });
-
 
 app.use((req, res, next) => {
   res.locals.cspNonce = crypto.randomBytes(16).toString('base64');
@@ -840,7 +977,9 @@ app.use(helmet({
       "connect-src": [
         "'self'",
         "https://fonts.googleapis.com",
-        "https://fonts.gstatic.com"
+        "https://fonts.gstatic.com",
+        "ws",
+        "wss"
       ],
       // (optional) if you embed media files via HTTPS
       "media-src": ["'self'", "https:"],
@@ -867,44 +1006,6 @@ app.use((req, res, next) => {
   } catch {}
   next();
 });
-
-function requirePremiumOrDailyReveal(limit = 1, { graceHours = 72, verifiedBonus = 1 } = {}) {
-  return async (req, res, next) => {
-    const u = req.user || (req.session?.userId && await User.findById(req.session.userId)) || null;
-    if (!u) return res.redirect('/login');
-
-    // Premium always allowed
-    if (u.plan && u.plan !== 'free' || u.isPremium) return next();
-
-    // Onboarding grace (optional)
-    const createdAt = u.createdAt ? new Date(u.createdAt).getTime() : 0;
-    const nowMs = Date.now();
-    const graceOk =
-      (u.onboardingGraceUntil && new Date(u.onboardingGraceUntil).getTime() > nowMs) ||
-      (!!createdAt && (nowMs - createdAt) <= graceHours * 3600 * 1000);
-
-    if (graceOk) return next();
-
-    // Daily reveal counter
-    const todayKey = new Date().toDateString();
-    if (u.likesRevealDay !== todayKey) {
-      u.likesRevealDay = todayKey;
-      u.likesRevealCount = 0;
-    }
-
-    const allowance = limit + (u.verifiedAt ? verifiedBonus : 0);
-    if ((u.likesRevealCount || 0) < allowance) {
-      u.likesRevealCount = (u.likesRevealCount || 0) + 1;
-      await u.save();
-      // grant this request and mark session so GET /likes-you can render unblurred
-      req.session.likesRevealDay = todayKey;
-      return next();
-    }
-
-    // Out of tokens → paywall (402)
-    return res.status(402).render('paywall', { feature: 'Who liked you', allowance, used: u.likesRevealCount });
-  };
-}
 
 // --- Global navbar data (counts + streak + likesRemaining) ---
 app.use(async (req, res, next) => {
@@ -1127,6 +1228,15 @@ app.post('/verify-email/confirm', checkAuth, async (req, res) => {
   }
 });
 
+// put near your static routes
+app.get('/socket.io/socket.io.js', (req, res) => res.redirect(301, '/js/socket.io.js'));
+
+app.get('/favicon.ico', (req, res) => res.status(204).end());
+
+// Serve it to the client
+app.get('/api/rtc/config', checkAuth, (req, res) => {
+  res.json({ rtc: RTC_CONFIG });
+});
 // /profile route
 app.get('/profile', checkAuth, async (req, res) => {
   try {
@@ -2842,11 +2952,13 @@ app.get('/dashboard', checkAuth, async (req, res) => {
       smoking       : toTrimmed(req.query.smoking) || '',
       drinking      : toTrimmed(req.query.drinking) || '',
       sort          : req.query.sort || 'active',  // includes 'distance'
+      // NOTE: If you support videoChat here, it should be on rawFilters too ('' | '1' | '0')
+      videoChat     : toTrimmed(req.query.videoChat || ''),
     };
 
     // ---- Premium clamp (added) ----
-    const FREE_MAX_RADIUS_KM = Number(process.env.FREE_MAX_RADIUS_KM || 25); // ⬅️
-    function clampFiltersForFree(filters, isPremium) {                       // ⬅️
+    const FREE_MAX_RADIUS_KM = Number(process.env.FREE_MAX_RADIUS_KM || 25);
+    function clampFiltersForFree(filters, isPremium) {
       const out = { ...filters };
       const locks = { minPhotos:false, languages:false, lifestyle:false, radius:false, distanceSort:false };
       if (!isPremium) {
@@ -2861,14 +2973,12 @@ app.get('/dashboard', checkAuth, async (req, res) => {
       }
       return { filters: out, locks };
     }
+
+    // ⬇️⬇️⬇️  **CHANGED ORDER**: clamp filters FIRST so `filters` exists before we read filters.sort below
     const { filters: f1, locks: l1 } = clampFiltersForFree(rawFilters, !!currentUser.isPremium);
     const { filters, locks: l2 }     = clampFiltersByPlan(f1, currentUser);
-    const premiumLocks = { ...l1, ...l2 };
-
-    // strict filter only if Elite:
-    if (filters.videoChat === '1' && isElite(currentUser)) {
-  query.videoChat = true;
-    }
+    const premiumLocks               = { ...l1, ...l2 };
+    // ⬆️⬆️⬆️
 
     // ---- Paging ----
     const page  = Math.max(toInt(req.query.page, 1), 1);
@@ -2876,7 +2986,7 @@ app.get('/dashboard', checkAuth, async (req, res) => {
     const skip  = (page - 1) * limit;
 
     // ---- Sorting (boost first, then chosen order) ----
-    const sortKey = filters.sort || 'active';                 // ⬅️ rawFilters → filters
+    const sortKey = filters.sort || 'active';   // ✅ now safe: filters is defined
     let sortBase = { lastActive: -1, _id: -1 };
     if (sortKey === 'recent')   sortBase = { createdAt: -1, _id: -1 };
     if (sortKey === 'ageAsc')   sortBase = { 'profile.age': 1,  _id: -1 };
@@ -2887,55 +2997,60 @@ app.get('/dashboard', checkAuth, async (req, res) => {
     // ---- Base query ----
     const query = { _id: { $nin: excludedUserIds }, profile: { $exists: true } };
 
+    // strict filter only if Elite:
+    if (filters.videoChat === '1' && isElite(currentUser)) {
+      query.videoChat = true;
+    }
+
     // Gender
-    if (filters.seekingGender !== 'Any') query['profile.gender'] = filters.seekingGender; // ⬅️
+    if (filters.seekingGender !== 'Any') query['profile.gender'] = filters.seekingGender;
 
     // Age range
-    const minAge = toInt(filters.minAge);                      // ⬅️
-    const maxAge = toInt(filters.maxAge);                      // ⬅️
+    const minAge = toInt(filters.minAge);
+    const maxAge = toInt(filters.maxAge);
     if (minAge != null && maxAge != null) query['profile.age'] = { $gte: minAge, $lte: maxAge };
     else if (minAge != null)              query['profile.age'] = { $gte: minAge };
     else if (maxAge != null)              query['profile.age'] = { $lte: maxAge };
 
     // Location filters
-    if (filters.country !== 'Any') query['profile.country'] = filters.country;                         // ⬅️
-    if (filters.stateProvince)     query['profile.stateProvince'] = new RegExp(filters.stateProvince, 'i'); // ⬅️
-    if (filters.city)              query['profile.city'] = new RegExp(filters.city, 'i');              // ⬅️
+    if (filters.country !== 'Any') query['profile.country'] = filters.country;
+    if (filters.stateProvince)     query['profile.stateProvince'] = new RegExp(filters.stateProvince, 'i');
+    if (filters.city)              query['profile.city'] = new RegExp(filters.city, 'i');
 
     // Free-text & interests
-    if (filters.q) {                                                                                   // ⬅️
+    if (filters.q) {
       query.$or = [
         { username: new RegExp(filters.q, 'i') },
         { 'profile.bio': new RegExp(filters.q, 'i') },
       ];
     }
-    if (filters.interests) {                                                                           // ⬅️
+    if (filters.interests) {
       query['profile.interests'] = { $regex: filters.interests, $options: 'i' };
     }
 
     // ---- Advanced filters ----
-    if (filters.verifiedOnly === '1')  query.verifiedAt = { $ne: null };                               // ⬅️
-    if (filters.onlineNow   === '1')   query.lastActive = { $gte: new Date(Date.now() - 5 * 60 * 1000) }; // ⬅️
-    if (filters.hasPhoto    === '1')   query['profile.photos.0'] = { $exists: true, $ne: null };       // ⬅️
+    if (filters.verifiedOnly === '1')  query.verifiedAt = { $ne: null };
+    if (filters.onlineNow   === '1')   query.lastActive = { $gte: new Date(Date.now() - 5 * 60 * 1000) };
+    if (filters.hasPhoto    === '1')   query['profile.photos.0'] = { $exists: true, $ne: null };
 
-    const minPhotosWanted = toInt(filters.minPhotos, 0);                                               // ⬅️
+    const minPhotosWanted = toInt(filters.minPhotos, 0);
     if (minPhotosWanted && minPhotosWanted > 1) {
       query[`profile.photos.${minPhotosWanted - 1}`] = { $exists: true, $ne: null };
     }
 
-    if (filters.religion)     query['profile.religion']     = new RegExp(filters.religion, 'i');       // ⬅️
-    if (filters.denomination) query['profile.denomination'] = new RegExp(filters.denomination, 'i');   // ⬅️
+    if (filters.religion)     query['profile.religion']     = new RegExp(filters.religion, 'i');
+    if (filters.denomination) query['profile.denomination'] = new RegExp(filters.denomination, 'i');
 
-    if (filters.languages && String(filters.languages).trim() !== '') {                                // ⬅️
+    if (filters.languages && String(filters.languages).trim() !== '') {
       const langs = Array.isArray(filters.languages)
         ? filters.languages
         : String(filters.languages).split(',').map(s => s.trim()).filter(Boolean);
       if (langs.length) query['profile.languages'] = { $in: langs };
     }
 
-    if (filters.education) query['profile.education'] = new RegExp(filters.education, 'i');            // ⬅️
-    if (filters.smoking)   query['profile.smoking']   = new RegExp(filters.smoking, 'i');              // ⬅️
-    if (filters.drinking)  query['profile.drinking']  = new RegExp(filters.drinking, 'i');             // ⬅️
+    if (filters.education) query['profile.education'] = new RegExp(filters.education, 'i');
+    if (filters.smoking)   query['profile.smoking']   = new RegExp(filters.smoking, 'i');
+    if (filters.drinking)  query['profile.drinking']  = new RegExp(filters.drinking, 'i');
 
     // ---- Projection ----
     const projection = {
@@ -2946,7 +3061,7 @@ app.get('/dashboard', checkAuth, async (req, res) => {
       verifiedAt           : 1,
       isPremium            : 1,
       stripePriceId        : 1,
-      subscriptionPriceId  : 1, // include if you store it
+      subscriptionPriceId  : 1,
       'profile.age'        : 1,
       'profile.bio'        : 1,
       'profile.photos'     : 1,
@@ -2979,14 +3094,14 @@ app.get('/dashboard', checkAuth, async (req, res) => {
       const distanceKm =
         typeof meLat === 'number' && typeof meLng === 'number' &&
         typeof u?.profile?.lat === 'number' && typeof u?.profile?.lng === 'number'
-          ? haversineKm(meLat, meLng, u.profile.lat, u.profile.lng)
+          ? haversineKm(meLat, meLng, u.profile.lat, u.profile.lng)   // <-- ensure this helper exists
           : null;
 
       return {
         ...u,
         isOnline,
         distanceKm,
-        boostActive: computeBoostActive(u, now),
+        boostActive: computeBoostActive(u, now),                      // <-- ensure this helper exists
         memberLevel: tierOf(u), // free | silver | emerald (used by EJS crowns)
       };
     };
@@ -2994,27 +3109,27 @@ app.get('/dashboard', checkAuth, async (req, res) => {
     let potentialMatches = (rawList || []).map(enhance);
 
     // ---- Radius post-filter + optional distance sort ----
-    const radiusKm = toInt(filters.radiusKm, 0) || 0;                                                // ⬅️
+    const radiusKm = toInt(filters.radiusKm, 0) || 0;
     if (radiusKm > 0 && typeof meLat === 'number' && typeof meLng === 'number') {
       potentialMatches = potentialMatches.filter(u =>
         typeof u.distanceKm === 'number' && u.distanceKm <= radiusKm
       );
     }
-    if (filters.sort === 'distance') {                                                                // ⬅️
+    if (filters.sort === 'distance') {
       potentialMatches.sort((a, b) => (a.distanceKm ?? 1e9) - (b.distanceKm ?? 1e9));
     }
 
     // ---- Favorites & Wave flags for UI (non-destructive) ----
-    const favoriteSet = new Set((currentUser.favorites || []).map(id => String(id)));
-    const wavedSet    = new Set((currentUser.waved || []).map(id => String(id)));
-    const superLikedSet = new Set((currentUser.superLiked || []).map(id => String(id)));
+    const favoriteSet   = new Set((currentUser.favorites   || []).map(id => String(id)));
+    const wavedSet      = new Set((currentUser.waved       || []).map(id => String(id)));
+    const superLikedSet = new Set((currentUser.superLiked  || []).map(id => String(id)));
 
     potentialMatches = potentialMatches.map(u => {
       const idStr = String(u._id);
       return {
         ...u,
-        isFavorite: favoriteSet.has(idStr), // ⭐ card state
-        iWaved:     wavedSet.has(idStr),    // 👋 disable/label Wave
+        isFavorite: favoriteSet.has(idStr),
+        iWaved:     wavedSet.has(idStr),
         iSuperLiked: superLikedSet.has(idStr),
       };
     });
@@ -3072,8 +3187,8 @@ app.get('/dashboard', checkAuth, async (req, res) => {
       likesRemaining,
       unreadNotificationCount: unreadNotificationCount || 0,
       unreadMessages: unreadMessages || 0,
-      filters,              // ⬅️ clamped filters (keeps sticky in the modal)
-      premiumLocks,         // ⬅️ which controls were locked (for tiny lock chips in UI if you want)
+      filters,              // clamped filters (sticky)
+      premiumLocks,         // which controls were locked
       pageMeta: {
         page,
         limit,
@@ -3902,38 +4017,57 @@ async function loadThread(meId, otherId, opts = {}) {
   return { peer, initialHistory };
 }
 
+// ---- GET /chat/:id ----
 app.get('/chat/:id', checkAuth, async (req, res) => {
   try {
-    const meId    = req.session.userId;
-    const otherId = req.params.id;
+    const meId    = String(req.session.userId);
+    const otherId = String(req.params.id);
 
-    const currentUser = await User.findById(meId).lean();
+    const currentUser = await User.findById(meId)
+      .select('_id username isPremium stripePriceId subscriptionPriceId profile.videoChat profile.photos')
+      .lean();
     if (!currentUser) return res.redirect('/login');
 
+    // Load thread & peer
     const { peer, initialHistory } = await loadThread(meId, otherId);
     if (!peer) {
       return res.status(404).render('error', { status: 404, message: 'User not found.' });
     }
 
-    // ✅ robust mutual match
+    // Ensure peer has the fields chat.ejs expects
+    // (if loadThread already returns them, this is a no-op)
+    const safePeer = {
+      _id:        peer._id,
+      username:   peer.username,
+      profile:    peer.profile || {},
+      isPremium:  peer.isPremium || false,
+      stripePriceId:       peer.stripePriceId || null,
+      subscriptionPriceId: peer.subscriptionPriceId || null,
+      videoChat:  peer.videoChat ?? peer?.profile?.videoChat ?? false,
+      photos:     peer?.profile?.photos || [],
+    };
+
+    // Mutual match (controls composer visibility)
     const isMatched = await isMutualMatch(meId, otherId);
 
-    // Badges/counts (exclude my soft-deleted)
+    // Navbar badges (respect soft-deletes)
     const meObj = new ObjectId(meId);
     const [unreadMessages, unreadNotificationCount] = await Promise.all([
       Message.countDocuments({
         recipient: meObj,
         read: false,
-        deletedFor: { $nin: [meObj] } // ✅ respect soft-deletes
+        deletedFor: { $nin: [meObj] }
       }),
       Notification.countDocuments({ recipient: meObj, read: false }),
     ]);
 
     return res.render('chat', {
       currentUser,
-      otherUser: peer,        // chat.ejs expects otherUser
-      isMatched,              // chat.ejs uses this to show/hide composer
+      peer: safePeer,          // ✅ what chat.ejs expects
+      otherUser: safePeer,     // (optional back-compat)
+      isMatched,
       messages: initialHistory,
+      initialHistory,
       unreadMessages,
       unreadNotificationCount
     });

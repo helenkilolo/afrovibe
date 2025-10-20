@@ -2,10 +2,12 @@
 (function () {
   // ----- DOM refs / state -----
   const myId       = document.getElementById('currentUserId')?.value || '';
-  const peerId     = document.getElementById('peerId')?.value || '';
+  const peerId     = document.getElementById('peerId')?.value || document.getElementById('otherUserId')?.value || '';
   const threadUl   = document.getElementById('threadList');
   const chatScroll = document.getElementById('chatScroll');
-  const socket     = window.__navSocket || window.socket || (window.socket = io()); // reuse navbar socket if present
+
+  // Reuse the navbar socket if present, else create one
+  const socket = window.__navSocket || window.socket || (window.socket = io());
 
   // ----- helpers -----
   function qsRowByUser(id) {
@@ -276,104 +278,219 @@
   if (chatScroll) chatScroll.scrollTop = chatScroll.scrollHeight;
 })();
 
-// ========== RTC (Video chat) block — safe to append ==========
+
+// ========== RTC (Video chat) – signaling: rtc:call/offer/answer/candidate/end ==========
 (function () {
-  const modal   = document.querySelector('#rtc-modal');
-  const vLocal  = document.querySelector('#rtc-local');
-  const vRemote = document.querySelector('#rtc-remote');
-  const startBtn = document.querySelector('.video-call-btn');
+  const modal      = document.getElementById('rtc-modal');
+  const vRemote    = document.getElementById('rtc-remote');
+  const vLocal     = document.getElementById('rtc-local');
+  const statusEl   = document.getElementById('rtc-status');
+  const incomingUI = document.getElementById('rtc-incoming');
+  const fromLbl    = document.getElementById('rtc-from-label');
 
-  if (!modal || !vLocal || !vRemote || !startBtn) return;
+  const btnsCall   = document.querySelectorAll('.video-call-btn');
+  const btnMute    = modal?.querySelector('.rtc-mute');
+  const btnVideo   = modal?.querySelector('.rtc-video');
+  const btnEndAll  = modal?.querySelectorAll('.rtc-hangup');
+  const btnAccept  = modal?.querySelector('.rtc-accept');
+  const btnDecline = modal?.querySelector('.rtc-decline');
 
-  const socket = window.socket || (window.socket = io());
+  if (!modal || !vLocal || !vRemote || !btnsCall.length) return;
+
+  const socket   = window.__navSocket || window.socket || (window.socket = io());
   const myUserId = document.getElementById('currentUserId')?.value || '';
-  const peerId   = startBtn?.dataset?.peerId || document.getElementById('peerId')?.value || '';
+  const fixedPeerId = document.getElementById('peerId')?.value || document.getElementById('otherUserId')?.value || '';
 
-  const iceServers = window.RTC_ICE_SERVERS || [{ urls: 'stun:stun.l.google.com:19302' }];
+  // Handle server-side gating errors gracefully
+  socket.on('connect_error', (err) => {
+    if (String(err?.message).includes('upgrade-required')) {
+      window.location.href = '/upgrade?reason=video';
+    }
+  });
+  socket.on('rtc:error', (e) => {
+    if (e?.code === 'upgrade-required') {
+      window.location.href = '/upgrade?reason=video';
+    }
+  });
 
+  // Modal helpers
+  function openModal() { try { modal.showModal(); } catch {} }
+  function closeModal() { try { modal.close(); } catch {} }
+  function setStatus(txt) { if (statusEl) statusEl.textContent = txt; }
+
+  // RTC state
   let pc = null;
   let localStream = null;
-  let remoteStream = null;
+  let isCaller = false;
+  let targetUserId = null;
+  let rtcConfig = null;
+
+  async function getRTCConfig() {
+    if (rtcConfig) return rtcConfig;
+    try {
+      const res = await fetch('/api/rtc/config', { credentials: 'include' });
+      const json = await res.json();
+      rtcConfig = json?.rtc || { iceServers: [{ urls: ['stun:stun.l.google.com:19302'] }] };
+    } catch {
+      rtcConfig = { iceServers: [{ urls: ['stun:stun.l.google.com:19302'] }] };
+    }
+    return rtcConfig;
+  }
 
   async function ensureLocal() {
     if (localStream) return localStream;
-    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
-    vLocal.srcObject = localStream;
-    return localStream;
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+      vLocal.srcObject = localStream;
+      return localStream;
+    } catch (err) {
+      console.error('getUserMedia failed', err);
+      setStatus('Could not access camera/microphone.');
+      return null;
+    }
   }
-  function createPeer() {
-    pc = new RTCPeerConnection({ iceServers });
-    remoteStream = new MediaStream();
-    vRemote.srcObject = remoteStream;
 
-    pc.ontrack = (e) => e.streams[0]?.getTracks().forEach(t => remoteStream.addTrack(t));
+  async function initPC() {
+    const cfg = await getRTCConfig();
+    pc = new RTCPeerConnection(cfg);
+
     pc.onicecandidate = (e) => {
-      if (e.candidate) socket.emit('rtc:candidate', { to: peerId, from: myUserId, cand: e.candidate });
+      if (e.candidate && targetUserId) {
+        socket.emit('rtc:candidate', { to: targetUserId, candidate: e.candidate });
+      }
     };
-    return pc;
-  }
-  async function startCall() {
-    if (!peerId) return;
-    const r = await fetch(`/api/call/request/${encodeURIComponent(peerId)}`, {
-      method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }
-    });
-    if (r.status === 402) return alert('Video chat is an Elite feature.');
-    if (r.status === 429) return alert('Please wait before trying again.');
-    if (!r.ok)            return alert('Could not start video chat.');
 
-    await ensureLocal();
-    pc = createPeer();
-    localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+    pc.ontrack = (e) => {
+      vRemote.srcObject = e.streams[0];
+    };
+
+    // attach local tracks
+    const ls = await ensureLocal();
+    if (!ls) return false;
+    ls.getTracks().forEach(t => pc.addTrack(t, ls));
+    return true;
+  }
+
+  // ====== Outgoing ======
+  async function startCall(toUserId) {
+    if (!toUserId) return;
+    targetUserId = toUserId;
+    isCaller = true;
+    openModal();
+    setStatus('Starting…');
+
+    const ok = await initPC();
+    if (!ok) return;
+
+    // Let callee know
+    socket.emit('rtc:call', { to: targetUserId, meta: {} });
+
+    // Create & send offer
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
-    socket.emit('rtc:offer', { to: peerId, from: myUserId, sdp: offer });
-    modal.showModal();
-  }
-  function endCall() {
-    try { pc?.getSenders()?.forEach(s => s.track?.stop()); } catch {}
-    try { localStream?.getTracks()?.forEach(t => t.stop()); } catch {}
-    try { pc?.close(); } catch {}
-    pc = null; localStream = null; remoteStream = null;
-    modal.close();
+    socket.emit('rtc:offer', { to: targetUserId, sdp: offer });
+    setStatus('Calling…');
   }
 
-  // Incoming
+  // ====== Incoming ======
+  socket.on('rtc:incoming', ({ from }) => {
+    targetUserId = from;
+    isCaller = false;
+    openModal();
+    setStatus('Incoming call…');
+    incomingUI?.classList.remove('hidden');
+    if (fromLbl) fromLbl.textContent = 'Incoming…';
+  });
+
+  btnAccept?.addEventListener('click', async () => {
+    incomingUI?.classList.add('hidden');
+    const ok = await initPC();
+    if (!ok) return;
+    setStatus('Connecting…');
+  });
+
+  btnDecline?.addEventListener('click', () => {
+    incomingUI?.classList.add('hidden');
+    endCall('declined');
+  });
+
+  // ====== SDP & ICE ======
   socket.on('rtc:offer', async ({ from, sdp }) => {
-    if (String(from) !== String(peerId)) return;
-    await ensureLocal();
-    pc = createPeer();
-    localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+    targetUserId = from;
+    if (!pc) {
+      const ok = await initPC();
+      if (!ok) return;
+    }
     await pc.setRemoteDescription(new RTCSessionDescription(sdp));
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
-    socket.emit('rtc:answer', { to: from, from: myUserId, sdp: answer });
-    modal.showModal();
+    socket.emit('rtc:answer', { to: targetUserId, sdp: answer });
+    setStatus('Answering…');
   });
-  socket.on('rtc:answer', async ({ sdp }) => {
+
+  socket.on('rtc:answer', async ({ from, sdp }) => {
     if (!pc) return;
     await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+    setStatus('Connected');
   });
-  socket.on('rtc:candidate', async ({ cand, from }) => {
-    if (!pc || String(from) !== String(peerId) || !cand) return;
-    try { await pc.addIceCandidate(new RTCIceCandidate(cand)); } catch {}
-  });
-  socket.on('rtc:hangup', endCall);
-  socket.on('rtc:decline', endCall);
 
-  // UI
-  document.addEventListener('click', (e) => {
-    if (e.target.closest('.video-call-btn')) { e.preventDefault(); startCall(); }
-    if (e.target.closest('.rtc-hangup')) {
-      socket.emit('rtc:hangup', { to: peerId, from: myUserId });
-      endCall();
-    }
-    if (e.target.closest('.rtc-mute')) {
-      const t = localStream?.getAudioTracks?.()[0]; if (t) t.enabled = !t.enabled;
-      e.target.textContent = (t && !t.enabled) ? 'Unmute' : 'Mute';
-    }
-    if (e.target.closest('.rtc-video')) {
-      const t = localStream?.getVideoTracks?.()[0]; if (t) t.enabled = !t.enabled;
-      e.target.textContent = (t && !t.enabled) ? 'Video On' : 'Video';
+  socket.on('rtc:candidate', async ({ from, candidate }) => {
+    if (!pc || !candidate) return;
+    try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch (e) {
+      console.warn('Bad ICE candidate', e);
     }
   });
+
+  socket.on('rtc:end', ({ reason }) => {
+    setStatus(reason || 'Ended');
+    teardown();
+    closeModal();
+  });
+
+  function teardown() {
+    try { pc?.getSenders()?.forEach(s => s.track && s.track.stop()); } catch {}
+    try { localStream?.getTracks()?.forEach(t => t.stop()); } catch {}
+    try { pc?.close(); } catch {}
+    pc = null;
+    localStream = null;
+    targetUserId = null;
+    isCaller = false;
+  }
+
+  function endCall(reason) {
+    if (targetUserId) socket.emit('rtc:end', { to: targetUserId, reason: reason || 'hangup' });
+    teardown();
+    closeModal();
+  }
+
+  // ====== UI bindings ======
+  btnsCall.forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const to = btn.dataset.peerId || fixedPeerId;
+      if (!to) return;
+      startCall(to);
+    });
+  });
+
+  btnEndAll?.forEach?.(b => b.addEventListener('click', () => endCall('hangup')));
+
+  btnMute?.addEventListener('click', () => {
+    const a = localStream?.getAudioTracks?.()[0];
+    if (!a) return;
+    a.enabled = !a.enabled;
+    btnMute.classList.toggle('btn-active', !a.enabled);
+    btnMute.textContent = a.enabled ? 'Mute' : 'Unmute';
+  });
+
+  btnVideo?.addEventListener('click', () => {
+    const v = localStream?.getVideoTracks?.()[0];
+    if (!v) return;
+    v.enabled = !v.enabled;
+    btnVideo.classList.toggle('btn-active', !v.enabled);
+    btnVideo.textContent = v.enabled ? 'Video' : 'Video On';
+  });
+
+  // Close modal cleanup
+  modal?.addEventListener('close', () => teardown());
 })();

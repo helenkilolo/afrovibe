@@ -120,25 +120,44 @@
   </main>
 
   <!-- RTC modal (shared) -->
-  <dialog id="rtc-modal" class="modal">
-    <div class="modal-box p-0">
-      <div class="flex items-center justify-between px-4 py-3 border-b">
-        <div class="font-semibold">Video chat</div>
-        <button class="btn btn-ghost btn-xs rtc-hangup">Hang up</button>
+  <!-- RTC modal (shared) -->
+<dialog id="rtc-modal" class="modal">
+  <div class="modal-box p-0 max-w-4xl">
+    <div class="flex items-center justify-between px-4 py-3 border-b bg-base-100">
+      <div class="flex items-center gap-2">
+        <span class="font-semibold">Video chat</span>
+        <span id="rtc-status" class="text-xs opacity-70">Connecting…</span>
       </div>
-      <div class="grid grid-cols-1 gap-2 p-3">
-        <video id="rtc-remote" playsinline autoplay class="w-full rounded bg-base-200"></video>
-        <video id="rtc-local"  playsinline autoplay muted class="w-40 h-28 rounded bg-base-200 self-end"></video>
-      </div>
-      <div class="px-4 pb-4 flex gap-2 justify-end">
-        <button class="btn btn-outline btn-sm rtc-mute">Mute</button>
-        <button class="btn btn-outline btn-sm rtc-video">Video</button>
-        <button class="btn btn-error btn-sm rtc-hangup">End</button>
+      <div class="flex gap-2">
+        <button class="btn btn-outline btn-xs rtc-mute"  type="button">Mute</button>
+        <button class="btn btn-outline btn-xs rtc-video" type="button">Video</button>
+        <button class="btn btn-error   btn-xs rtc-hangup" type="button">End</button>
       </div>
     </div>
-    <form method="dialog" class="modal-backdrop"><button>close</button></form>
-  </dialog>
 
+    <div class="grid md:grid-cols-[1fr_auto] gap-2 p-3 bg-base-200">
+      <video id="rtc-remote" playsinline autoplay class="w-full aspect-video rounded bg-black"></video>
+      <video id="rtc-local"  playsinline autoplay muted class="w-48 h-36 md:h-40 rounded bg-black self-end shadow"></video>
+    </div>
+
+    <!-- Incoming call overlay (hidden by default) -->
+    <div id="rtc-incoming" class="p-4 hidden">
+      <div class="card bg-base-100 border">
+        <div class="card-body p-4 flex items-center justify-between">
+          <div>
+            <div class="font-semibold">Incoming call</div>
+            <div class="text-xs opacity-70" id="rtc-from-label"></div>
+          </div>
+          <div class="flex gap-2">
+            <button class="btn btn-success btn-sm rtc-accept" type="button">Accept</button>
+            <button class="btn btn-ghost   btn-sm rtc-decline" type="button">Decline</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
   <script src="/socket.io/socket.io.js" defer></script>
   <script src="/js/page-messages.js" defer></script>
 </body>
