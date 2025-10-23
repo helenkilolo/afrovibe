@@ -8,7 +8,6 @@
 
   <!-- Hidden IDs for JS -->
   <input type="hidden" id="currentUserId" value="<%= currentUser?._id %>">
-  <input type="hidden" id="peerId" value="<%= peer?._id || '' %>">
 
   <main class="max-w-6xl mx-auto p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
     <!-- Threads (left) -->
@@ -23,142 +22,60 @@
       </div>
 
       <ul id="threadList" class="menu bg-base-100 rounded-xl border">
-        <% (matches || []).forEach(u => { %>
-          <li class="border-b last:border-0">
-            <a href="/messages?with=<%= u._id %>" data-user-id="<%= u._id %>" class="flex items-center gap-3">
-              <div class="avatar">
-                <div class="w-10 rounded-full">
-                  <img src="<%= (u.profile?.photos?.[0] || '/img/placeholder-avatar.png') %>" alt="">
-                </div>
-              </div>
-              <div class="min-w-0">
-                <div class="truncate"><%= u.username %></div>
-                <div class="text-xs opacity-70">
-                  <% if (u.lastMessage) { %>
-                    <%= (u.lastMessage?.sender?._id?.toString() === currentUser._id.toString() ? 'You: ' : (u.username + ': ')) %>
-                    <%= (u.lastMessage?.content || '').slice(0, 40) %>
-                  <% } else { %>
-                    No messages yet
-                  <% } %>
-                </div>
-              </div>
-              <input type="checkbox" class="checkbox checkbox-xs threadChk hidden ml-auto" data-user-id="<%= u._id %>">
-            </a>
-          </li>
-        <% }) %>
-      </ul>
+  <% (matches || []).forEach(u => { 
+       const p0 = u?.profile?.photos?.[0] || '/images/default-avatar.png';
+  %>
+    <!-- give the LI the thread id for easy selection -->
+    <li class="border-b last:border-0" data-user-id="<%= u._id %>">
+      <!-- normal link when NOT managing -->
+      <a href="/chat/<%= u._id %>" class="rowLink flex items-center gap-3 py-3 px-3">
+        <div class="avatar">
+          <div class="w-10 h-10 rounded-full ring ring-base-300 ring-offset-2 overflow-hidden">
+            <img src="<%= p0.startsWith('/') ? p0 : ('/' + p0) %>" alt="avatar" class="object-cover w-full h-full"/>
+          </div>
+        </div>
+        <div class="min-w-0">
+          <div class="truncate font-medium"><%= u.username %></div>
+          <div class="text-xs opacity-70">
+            <% if (u.lastMessage) { %>
+              <%= (String(u.lastMessage?.sender?._id) === String(currentUser._id) ? 'You: ' : (u.username + ': ')) %>
+              <%= (u.lastMessage?.content || '').slice(0, 48) %>
+            <% } else { %>
+              No messages yet
+            <% } %>
+          </div>
+        </div>
+
+        <span class="ml-auto badge badge-sm hidden" data-unread-for="<%= u._id %>">0</span>
+
+        <!-- the checkbox is shown in Manage mode; clicking anywhere toggles it -->
+        <input type="checkbox"
+               class="checkbox checkbox-xs threadChk hidden ml-2"
+               data-user-id="<%= u._id %>"
+               aria-label="Select conversation" />
+      </a>
+    </li>
+  <% }) %>
+  <% if (!matches || matches.length === 0) { %>
+    <li class="p-4 text-center text-sm opacity-70">No matches yet. Start liking to create matches!</li>
+  <% } %>
+</ul>
     </aside>
 
-    <!-- Chat (right) -->
+    <!-- Right column: simple hero panel (no embedded chat) -->
     <section class="md:col-span-2">
-      <% if (!peer) { %>
-        <div class="card bg-base-100 border shadow p-6 text-center">
-          <div class="text-lg">Pick a conversation on the left.</div>
+      <div class="card bg-base-100 border shadow p-8 h-full flex items-center justify-center">
+        <div class="text-center space-y-2">
+          <div class="text-2xl font-semibold">Select a conversation</div>
+          <div class="opacity-70">Click any match on the left to open the chat thread.</div>
         </div>
-      <% } else { %>
-
-        <!-- Chat header (with Video button) -->
-        <div class="card bg-base-100 border shadow mb-3">
-          <div class="flex items-center justify-between px-4 py-3">
-            <div class="flex items-center gap-3">
-              <div class="avatar">
-                <div class="w-10 rounded-full">
-                  <img src="<%= (peer.profile?.photos?.[0] || '/img/placeholder-avatar.png') %>" alt="">
-                </div>
-              </div>
-              <div>
-                <div class="font-semibold"><%= peer.username %></div>
-                <div class="text-xs opacity-70">
-                  <% if (peer.lastActive) { %>
-                    Active <%= new Date(peer.lastActive).toLocaleString() %>
-                  <% } %>
-                </div>
-              </div>
-            </div>
-
-            <div class="flex items-center gap-2">
-              <!-- Video chat button (server will enforce eligibility on request) -->
-              <button
-                class="btn btn-sm btn-ghost video-call-btn"
-                data-peer-id="<%= peer._id %>"
-                title="Video chat (Elite)">
-                📹 Video chat
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Multi-select toolbar (per-message delete) -->
-        <div id="msToolbar" class="hidden mb-2 flex items-center justify-between">
-          <div class="text-sm">Selected: <span id="msCount">0</span></div>
-          <div class="flex items-center gap-2">
-            <button id="msDelete" class="btn btn-error btn-xs">Delete</button>
-            <button id="msCancel" class="btn btn-ghost btn-xs">Cancel</button>
-          </div>
-        </div>
-
-        <!-- Chat scroll area -->
-        <div id="chatScroll" class="card bg-base-100 border shadow p-3 space-y-2 max-h-[70vh] overflow-y-auto">
-          <% (initialHistory || []).forEach(m => { const mine = String(m.sender) === String(currentUser._id); %>
-            <div class="msg-row flex <%= mine ? 'justify-end' : 'justify-start' %>" data-mid="<%= m._id %>">
-              <div class="max-w-[80%] rounded-2xl px-3 py-2 <%= mine ? 'bg-primary text-white' : 'bg-gray-100' %>">
-                <div class="whitespace-pre-wrap break-words text-sm"><%= m.content %></div>
-                <div class="text-[10px] opacity-70 mt-1"><%= new Date(m.createdAt).toLocaleString() %></div>
-              </div>
-            </div>
-          <% }) %>
-        </div>
-
-        <!-- Composer -->
-        <form id="chatForm" class="mt-3 flex gap-2" action="/api/messages" method="post" onsubmit="return false;">
-          <input type="hidden" name="to" value="<%= peer._id %>">
-          <input id="chatInput" name="content" class="input input-bordered w-full" placeholder="Type a message…">
-          <button class="btn btn-primary">Send</button>
-        </form>
-      <% } %>
+      </div>
     </section>
   </main>
 
-  <!-- RTC modal (shared) -->
-  <!-- RTC modal (shared) -->
-<dialog id="rtc-modal" class="modal">
-  <div class="modal-box p-0 max-w-4xl">
-    <div class="flex items-center justify-between px-4 py-3 border-b bg-base-100">
-      <div class="flex items-center gap-2">
-        <span class="font-semibold">Video chat</span>
-        <span id="rtc-status" class="text-xs opacity-70">Connecting…</span>
-      </div>
-      <div class="flex gap-2">
-        <button class="btn btn-outline btn-xs rtc-mute"  type="button">Mute</button>
-        <button class="btn btn-outline btn-xs rtc-video" type="button">Video</button>
-        <button class="btn btn-error   btn-xs rtc-hangup" type="button">End</button>
-      </div>
-    </div>
-
-    <div class="grid md:grid-cols-[1fr_auto] gap-2 p-3 bg-base-200">
-      <video id="rtc-remote" playsinline autoplay class="w-full aspect-video rounded bg-black"></video>
-      <video id="rtc-local"  playsinline autoplay muted class="w-48 h-36 md:h-40 rounded bg-black self-end shadow"></video>
-    </div>
-
-    <!-- Incoming call overlay (hidden by default) -->
-    <div id="rtc-incoming" class="p-4 hidden">
-      <div class="card bg-base-100 border">
-        <div class="card-body p-4 flex items-center justify-between">
-          <div>
-            <div class="font-semibold">Incoming call</div>
-            <div class="text-xs opacity-70" id="rtc-from-label"></div>
-          </div>
-          <div class="flex gap-2">
-            <button class="btn btn-success btn-sm rtc-accept" type="button">Accept</button>
-            <button class="btn btn-ghost   btn-sm rtc-decline" type="button">Decline</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-  <form method="dialog" class="modal-backdrop"><button>close</button></form>
-</dialog>
-  <script src="/socket.io/socket.io.js" defer></script>
-  <script src="/js/page-messages.js" defer></script>
+  <!-- Sockets + page JS -->
+  <script src="/socket.io/socket.io.js" nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>" defer></script>
+  <script src="/js/socket-helper.js" nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>" defer></script>
+  <script src="/js/page-messages.js?v=4" nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>" defer></script>
 </body>
 </html>

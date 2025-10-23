@@ -3,77 +3,73 @@
 <head>
   <%- include('partials/head.ejs', { pageTitle: 'Chat' }) %>
 </head>
+
 <body class="bg-base-100 min-h-screen"
       data-peer-id="<%= (peer && peer._id) ? String(peer._id) : (otherUser && otherUser._id) ? String(otherUser._id) : '' %>">
+
   <%- include('partials/navbar.ejs', { currentUser, unreadMessages, unreadNotificationCount }) %>
 
-  <!-- Hidden IDs for JS (force strings) -->
-  <input type="hidden" id="currentUserId"  value="<%= currentUser && currentUser._id ? String(currentUser._id) : '' %>">
-  <input type="hidden" id="otherUserId"   value="<%=
-    (peer && peer._id) ? String(peer._id) :
-    (otherUser && otherUser._id) ? String(otherUser._id) : ''
-  %>">
-  <input type="hidden" id="otherUsername" value="<%=
-    (peer && peer.username) ? peer.username :
-    (otherUser && otherUser.username) ? otherUser.username : ''
-  %>">
+  <!-- Hidden IDs for JS (force clean 24-hex strings) -->
+<input type="hidden" id="currentUserId"
+       value="<%= currentUser && currentUser._id ? String(currentUser._id) : '' %>">
+<input type="hidden" id="otherUserId"
+       value="<%= (peer && peer._id) ? String(peer._id) :
+                 (otherUser && otherUser._id) ? String(otherUser._id) : '' %>">
+
 
   <main class="max-w-4xl mx-auto p-4">
     <!-- Header -->
     <div class="card bg-base-100 border shadow mb-3">
-      <div class="flex items-center justify-between px-4 py-3">
-        <div class="flex items-center gap-3">
-          <!-- Hard-sized avatar wrapper so it cannot blow up -->
-          <div style="width:48px;height:48px" class="rounded-full overflow-hidden ring ring-base-300 ring-offset-2">
-            <img
-              src="<%= (peer && peer.profile && peer.profile.photos && peer.profile.photos[0]) ? peer.profile.photos[0] : '/images/default-avatar.png' %>"
-              alt="avatar"
-              class="w-full h-full object-cover select-none"
-              draggable="false">
-          </div>
+  <div class="flex items-center justify-between px-4 py-3">
+    <div class="flex items-center gap-3">
+      <%
+  const p0 = peer?.profile?.photos?.[0] ? String(peer.profile.photos[0]).trim() : '';
+  const avatarSrc = p0 ? (p0.startsWith('/') ? p0 : '/' + p0) : '/images/default-avatar.png';
+%>
 
-          <div>
-            <div class="font-semibold text-base leading-tight">
-              <%= (peer && peer.username) ? peer.username : (otherUser && otherUser.username ? otherUser.username : 'User') %>
-            </div>
-            <div id="typingDot" class="text-xs opacity-60 leading-tight">&nbsp;</div>
-          </div>
-        </div>
+      <!-- Fixed-size circular avatar wrapper -->
+      <div class="rounded-full overflow-hidden ring ring-base-300 ring-offset-2"
+           style="width:48px;height:48px">
+        <img src="<%= avatarSrc %>"
+             alt="avatar"
+             class="w-full h-full object-cover select-none"
+             draggable="false">
+      </div>
 
-        <div class="flex items-center gap-2">
-          <!-- Video chat -->
-          <button
-            class="btn btn-sm btn-ghost video-call-btn"
-            data-peer-id="<%= (peer && peer._id) ? String(peer._id) : (otherUser && otherUser._id) ? String(otherUser._id) : '' %>"
-            title="Video chat">
-            📹 Video chat
-          </button>
+      <div>
+        <div class="font-semibold text-base leading-tight">
+          <%= (peer && peer.username) ? peer.username : (otherUser && otherUser.username) || 'User' %>
         </div>
+        <div id="typingDot" class="text-xs opacity-60 leading-tight">&nbsp;</div>
       </div>
     </div>
 
-    <!-- Bulk toolbar -->
-    <div id="bulkBar" class="hidden mb-2 flex items-center justify-between">
-      <div class="text-sm">Selected: <span id="selCount">0</span></div>
-      <div class="flex items-center gap-2">
-        <button id="deleteSelected" class="btn btn-error btn-xs">Delete</button>
-        <button id="deleteAll" class="btn btn-ghost btn-xs">Clear chat</button>
-        <button id="cancelSelect" class="btn btn-ghost btn-xs">Cancel</button>
-      </div>
+    <div class="flex items-center gap-2">
+      <button class="btn btn-sm btn-ghost video-call-btn"
+              data-peer-id="<%=
+                (peer && peer._id) ? String(peer._id) :
+                (otherUser && otherUser._id) ? String(otherUser._id) : ''
+              %>"
+              title="Video chat">
+        📹 Video chat
+      </button>
     </div>
+  </div>
+</div>
 
-    <!-- Messages -->
+    <!-- Messages list -->
     <%
       const _msgs = (typeof messages !== 'undefined' && messages)
                  || (typeof initialHistory !== 'undefined' && initialHistory)
                  || [];
     %>
-    <div id="chatScroll" class="card bg-base-100 border shadow p-3 space-y-2 max-h-[75vh] overflow-y-auto">
+    <div id="chatScroll" class="card bg-base-100 border shadow p-3 space-y-2 max-h-[70vh] md:max-h-[72vh] overflow-y-auto">
       <% _msgs.forEach(function(m){ const mine = String(m.sender) === String(currentUser._id); %>
         <div class="flex <%= mine ? 'justify-end' : 'justify-start' %>">
-          <div class="max-w-[80%] rounded-2xl px-3 py-2 <%= mine ? 'bg-primary text-white' : 'bg-gray-100' %>"
+          <div class="max-w-[85%] md:max-w-[75%] rounded-2xl px-3 py-2 <%= mine ? 'bg-primary text-white' : 'bg-gray-100' %>"
                data-id="<%= m._id %>"
-               data-ts="<%= new Date(m.createdAt || Date.now()).getTime() %>">
+               data-ts="<%= new Date(m.createdAt || Date.now()).getTime() %>"
+               data-mine="<%= mine ? '1' : '0' %>">
             <input type="checkbox" class="checkbox checkbox-xs chk hidden mr-2">
             <div class="whitespace-pre-wrap break-words text-sm"><%= m.content %></div>
             <div class="text-[10px] opacity-70 mt-1">
@@ -87,8 +83,8 @@
 
     <!-- Composer -->
     <% if (typeof isMatched === 'undefined' || isMatched) { %>
-      <form id="chatForm" class="mt-3 flex gap-2" action="/api/messages" method="post" onsubmit="return false;">
-        <input id="chatInput" name="content" class="input input-bordered w-full" placeholder="Type a message…">
+      <form id="chatForm" class="sticky bottom-0 mt-3 flex gap-2" action="/api/messages" method="post" onsubmit="return false;">
+        <input id="chatInput" name="content" class="input input-bordered flex-1" placeholder="Type a message…">
         <button class="btn btn-primary">Send</button>
       </form>
     <% } else { %>
@@ -145,10 +141,15 @@
     </div>
     <form method="dialog" class="modal-backdrop"><button>close</button></form>
   </dialog>
+<!-- Socket.IO (served by Express at /socket.io/socket.io.js) -->
+<script src="/socket.io/socket.io.js" nonce="<%= cspNonce %>" defer></script>
 
- <script nonce="<%= cspNonce %>" src="/socket.io/socket.io.js" defer></script>
-<script nonce="<%= cspNonce %>" src="/js/page-chat.js" defer></script>
+<!-- Singleton socket helper (must live in public/js/socket-helper.js) -->
+<script src="/js/socket-helper.js" nonce="<%= cspNonce %>" defer></script>
 
-  <%- include('partials/footer.ejs') %>
+<!-- Page logic -->
+<script src="/js/page-chat.js?v=4" nonce="<%= cspNonce %>" defer></script>
+
+  
 </body>
 </html>

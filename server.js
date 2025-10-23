@@ -19,6 +19,7 @@ const app = express();
 const server = http.createServer(app);
 const io = socketio(server);
 app.set('io', io);
+app.use((req, _res, next) => { req.io = io; next(); });
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
 
@@ -46,20 +47,19 @@ app.use((req, res, next) => {
 
 const BASE_URL = process.env.PUBLIC_BASE_URL || 'http://localhost:3000';
 
-// Price IDs (env)
-const STRIPE_PRICE_ID_PREMIUM = process.env.STRIPE_PRICE_ID_PREMIUM || process.env.STRIPE_PRICE_ID_SILVER || '';
-const STRIPE_PRICE_ID_ELITE   = process.env.STRIPE_PRICE_ID_ELITE   || '';
+// ----- Plan helpers (normalize names & fields) -----
+const STRIPE_PRICE_ID_ELITE   = process.env.STRIPE_PRICE_ID_ELITE   || process.env.STRIPE_PRICE_ID_EMERALD || '';
+const STRIPE_PRICE_ID_PREMIUM = process.env.STRIPE_PRICE_ID_PREMIUM || process.env.STRIPE_PRICE_ID_SILVER  || '';
 
-// Plan helpers (single source of truth)
-function planOf(u) {
-  const price = u?.stripePriceId || u?.subscriptionPriceId || null;
-  const s = String(price || '');
-  if (s && STRIPE_PRICE_ID_ELITE   && s === String(STRIPE_PRICE_ID_ELITE))   return 'elite';
-  if (s && STRIPE_PRICE_ID_PREMIUM && s === String(STRIPE_PRICE_ID_PREMIUM)) return 'premium';
-  return u?.isPremium ? 'premium' : 'free';
+function planOf(u = {}) {
+  const price = String(u.stripePriceId || u.subscriptionPriceId || '');
+  if (price && STRIPE_PRICE_ID_ELITE && price === STRIPE_PRICE_ID_ELITE)   return 'elite';
+  if (price && STRIPE_PRICE_ID_PREMIUM && price === STRIPE_PRICE_ID_PREMIUM) return 'premium';
+  if (u.isPremium) return 'premium'; // legacy boolean
+  return 'free';
 }
-function isElite(u){ return planOf(u) === 'elite'; }
-function isPremiumOrBetter(u){ const p = planOf(u); return p === 'premium' || p === 'elite'; }
+function isElite(u)              { return planOf(u) === 'elite'; }
+function isPremiumOrBetter(u)    { const p = planOf(u); return p === 'elite' || p === 'premium'; }
 
 const RTC_CONFIG = {
   iceServers: [
@@ -598,7 +598,7 @@ app.set('trust proxy', 1);
 
 // Body parsers
 app.use(express.json());
-
+app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Views and Static - Views first, then static before routes
@@ -665,13 +665,6 @@ const { Types: { ObjectId } } = require('mongoose');
 const MESSAGE_LIMIT_WINDOW_MS = 15_000; // 15s window
 const MESSAGE_LIMIT_COUNT = 8;
 
-// ===== Socket.IO setup =====
-
-// 1) Share session with Socket.IO first (you likely already have a session adapter; keep it)
-//    Make sure req.session is available as socket.request.session
-// io.engine.use(sessionMiddleware) ... (keep your existing code)
-
-// 2) Attach auth / eligibility middlewares BEFORE 'connection'
 io.use((socket, next) => {
   const sess = socket.request?.session;
   if (!sess?.userId) return next(new Error('unauthorized'));
@@ -679,48 +672,48 @@ io.use((socket, next) => {
   next();
 });
 
-// If you have isElite / isPremiumOrBetter locally defined, use those;
-// otherwise import from your helpers:
-// const { isElite, isPremiumOrBetter } = require('./utils/helpers');
-
 function canVideoChat(user) {
   // Example policy: Elite OR Premium with profile.videoChat enabled
   return isElite(user) || (isPremiumOrBetter(user) && user.videoChat === true);
 }
 
+// ----- Socket.IO RTC gate (one-time on connect) -----
 io.use(async (socket, next) => {
   try {
-    // Load minimal user fields for gating
-    const user = await User.findById(socket.userId)
-      .select('isPremium stripePriceId subscriptionPriceId videoChat')
+    const uid = socket.request?.session?.userId;
+    if (!uid) return next(new Error('unauthorized'));
+
+    const user = await User.findById(uid)
+      .select('isPremium stripePriceId subscriptionPriceId videoChat profile.videoChat')
       .lean();
+
     if (!user) return next(new Error('unauthorized'));
-    // Gate only RTC features; still allow chat if you prefer.
-    // If you want gating only on RTC, move this check into the RTC handlers instead.
-    // Here we keep it global to keep it simple:
-    socket.canVideoChat = canVideoChat(user);
-    next();
+
+    const canVideo = canVideoChat(user) || (!!user?.profile?.videoChat === true);
+
+    socket.user         = user;
+    socket.userId       = String(uid);
+    socket.canVideoChat = !!canVideo;
+
+    // 🔎 helpful one-liner
+    console.log(`[rtc] gate uid=${socket.userId} canVideo=${socket.canVideoChat}`);
+
+    return next();
   } catch (e) {
-    next(e);
+    return next(e);
   }
 });
 
-// 3) Single connection handler for BOTH chat and RTC
+// === Socket.IO: connection handler for BOTH chat + RTC ===
 io.on('connection', (socket) => {
   console.log(`User connected: ${socket.id} (uid=${socket.userId})`);
 
-  // --- Common rooms: unify on a single room key ---
-  // Choose ONE format and stick with it everywhere:
-  //   A) plain uid (simpler), or
-  //   B) "user:<uid>" (namespaced)
-  // You previously used both; let's normalize to plain uid:
+  // Use ONE room format everywhere: plain uid
   socket.join(socket.userId);
 
-  // --- State for chat rate-limiting ---
+  // ---- Chat rate-limiting state ----
   socket.data.msgCount = 0;
   socket.data.msgWindowStart = Date.now();
-  const MESSAGE_LIMIT_WINDOW_MS = 10_000;
-  const MESSAGE_LIMIT_COUNT = 40;
 
   function isValidId(id) {
     return typeof id === 'string' && ObjectId.isValid(id);
@@ -743,7 +736,7 @@ io.on('connection', (socket) => {
       const unread = await Message.countDocuments({
         recipient: me,
         read: false,
-        deletedFor: { $nin: [me] }
+        deletedFor: { $nin: [me] },
       });
       io.to(userId).emit('unread_update', { unread });
     } catch (e) {
@@ -756,16 +749,16 @@ io.on('connection', (socket) => {
     try {
       const uid = String(userId || '');
       if (!isValidId(uid)) return;
-      socket.join(uid);
+      socket.join(uid); // join the plain uid
       console.log(`User ${uid} registered on ${socket.id}`);
     } catch (e) {
       console.error('register_for_notifications error', e);
     }
   });
 
-  socket.on('chat:typing', (payload) => {
+  socket.on('chat:typing', (payload = {}) => {
     try {
-      const to = payload && String(payload.to || '');
+      const to = String(payload.to || '');
       if (!isValidId(to)) return;
       io.to(to).emit('chat:typing', { from: socket.userId });
     } catch (e) {
@@ -773,7 +766,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // OPTIONAL real-time send (kept disabled to avoid dupes; you post via HTTP)
+  // OPTIONAL realtime send (still disabled to avoid dupes; you post via HTTP)
   socket.on('chat_message', async (data, ack) => {
     if (process.env.ENABLE_SOCKET_SEND !== '1') {
       if (typeof ack === 'function') ack({ ok: false, error: 'disabled' });
@@ -804,47 +797,44 @@ io.on('connection', (socket) => {
     }
   });
 
-  // ---------- RTC signaling ----------
-  // If you want to fully block non-eligible users from RTC, enforce here:
-  function requireRTC() {
-    if (socket.canVideoChat) return true;
-    // tell caller they're not eligible
-    socket.emit('rtc:error', { code: 'upgrade-required' });
-    return false;
-  }
+ function guardRTC(handler) {
+  return (payload = {}) => {
+    if (!socket.canVideoChat) {
+      socket.emit('rtc:error', { code: 'upgrade-required', message: 'Upgrade required for video chat.' });
+      return;
+    }
+    handler(payload);
+  };
+}
 
-  socket.on('rtc:call', (payload) => {
-    if (!requireRTC()) return;
-    const { to, meta } = payload || {};
-    if (!to) return;
-    io.to(String(to)).emit('rtc:incoming', { from: socket.userId, meta: meta || {} });
-  });
+socket.on('rtc:call',      guardRTC(({ to, meta }) => {
+  if (!to) return;
+  console.log(`[rtc] call from=${socket.userId} to=${to}`);
+  io.to(String(to)).emit('rtc:incoming', { from: socket.userId, meta: meta || {} });
+}));
 
-  socket.on('rtc:offer', ({ to, sdp }) => {
-    if (!requireRTC()) return;
-    if (!to || !sdp) return;
-    io.to(String(to)).emit('rtc:offer', { from: socket.userId, sdp });
-  });
+socket.on('rtc:offer',     guardRTC(({ to, sdp }) => {
+  if (!to || !sdp) return;
+  io.to(String(to)).emit('rtc:offer', { from: socket.userId, sdp });
+}));
 
-  socket.on('rtc:answer', ({ to, sdp }) => {
-    if (!requireRTC()) return;
-    if (!to || !sdp) return;
-    io.to(String(to)).emit('rtc:answer', { from: socket.userId, sdp });
-  });
+socket.on('rtc:answer',    guardRTC(({ to, sdp }) => {
+  if (!to || !sdp) return;
+  io.to(String(to)).emit('rtc:answer', { from: socket.userId, sdp });
+}));
 
-  socket.on('rtc:candidate', ({ to, candidate }) => {
-    if (!requireRTC()) return;
-    if (!to || !candidate) return;
-    io.to(String(to)).emit('rtc:candidate', { from: socket.userId, candidate });
-  });
+socket.on('rtc:candidate', guardRTC(({ to, candidate }) => {
+  if (!to || !candidate) return;
+  io.to(String(to)).emit('rtc:candidate', { from: socket.userId, candidate });
+}));
 
-  socket.on('rtc:end', ({ to, reason }) => {
-    if (!to) return;
-    io.to(String(to)).emit('rtc:end', { from: socket.userId, reason: reason || 'hangup' });
-  });
+socket.on('rtc:end', ({ to, reason }) => {
+  if (!to) return;
+  io.to(String(to)).emit('rtc:end', { from: socket.userId, reason: reason || 'hangup' });
+});
 
   socket.on('disconnect', () => {
-    // optional: cleanup/logs
+    // optional cleanup/logging
   });
 });
 
@@ -1233,10 +1223,26 @@ app.get('/socket.io/socket.io.js', (req, res) => res.redirect(301, '/js/socket.i
 
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 
-// Serve it to the client
+// --- RTC config (STUN/TURN) ---
 app.get('/api/rtc/config', checkAuth, (req, res) => {
-  res.json({ rtc: RTC_CONFIG });
+  // default Google STUN + optional TURN from env
+  const iceServers = [];
+
+  // public STUN
+  iceServers.push({ urls: ['stun:stun.l.google.com:19302'] });
+
+  // optional TURN (set in .env when you have a TURN service)
+  if (process.env.TURN_URL && process.env.TURN_USERNAME && process.env.TURN_CREDENTIAL) {
+    iceServers.push({
+      urls: process.env.TURN_URL.split(',').map(s => s.trim()).filter(Boolean),
+      username: process.env.TURN_USERNAME,
+      credential: process.env.TURN_CREDENTIAL
+    });
+  }
+
+  res.json({ rtc: { iceServers } });
 });
+
 // /profile route
 app.get('/profile', checkAuth, async (req, res) => {
   try {
@@ -4208,6 +4214,57 @@ app.post(
     }
   }
 );
+
+app.post('/api/messages', checkAuth, messagesLimiter, vMessageSend, async (req, res) => {
+  try {
+    const sender = String(req.session.userId || '');
+    let recipient = (req.body.to || req.body.recipient || '').trim();
+    let content   = (req.body.content || '').trim();
+
+    if (!sender) return res.status(401).json({ ok: false, error: 'auth' });
+    if (!recipient || !ObjectId.isValid(recipient)) {
+      return res.status(400).json({
+        ok: false,
+        errors: [{ type: 'field', msg: 'to must be a MongoId', path: 'to', location: 'body' }],
+      });
+    }
+    if (recipient === sender) {
+      return res.status(400).json({ ok: false, error: 'Cannot message yourself' });
+    }
+    content = content.slice(0, 4000);
+    if (!content) {
+      return res.status(400).json({
+        ok: false,
+        errors: [{ type: 'field', msg: 'content is required', path: 'content', location: 'body' }],
+      });
+    }
+
+    // Require mutual match (keep/remove per your product rules)
+    const matched = await isMutualMatch(sender, recipient);
+    if (!matched) {
+      return res.status(403).json({ ok: false, code: 'not_matched', message: 'Chat requires a mutual match.' });
+    }
+
+    const message = await Message.create({ sender, recipient, content, read: false });
+
+    const ioRef = req.io || req.app?.get?.('io') || null;
+    ioRef?.to(String(recipient)).emit('chat:incoming', message);
+    ioRef?.to(String(sender)).emit('chat:sent', message);
+
+    const recipObj = new ObjectId(recipient);
+    const unread = await Message.countDocuments({
+      recipient: recipObj,
+      read: false,
+      deletedFor: { $nin: [recipObj] }
+    });
+    ioRef?.to(String(recipient)).emit('unread_update', { unread });
+
+    return res.json({ ok: true, message });
+  } catch (err) {
+    console.error('send message err', err);
+    return res.status(500).json({ ok: false });
+  }
+});
 
 
 // Mark a thread as read (robust + precise receipts)
